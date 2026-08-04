@@ -1,19 +1,91 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/dashboard_provider.dart';
+import '../data/sync_service.dart';
 import '../../patients/data/patients_provider.dart';
 import '../../../shared/widgets/patient_card.dart';
 
 import '../../../core/providers/connectivity_provider.dart';
 
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  bool _isSyncing = false;
+  String _lastSyncTime = 'Never';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLastSyncTime();
+  }
+
+  Future<void> _loadLastSyncTime() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _lastSyncTime = prefs.getString('last_sync_time') ?? 'Never';
+      });
+    }
+  }
+
+  Future<void> _performSync(bool deleteAfter) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Confirm Sync'),
+        content: Text(deleteAfter 
+          ? 'Are you sure you want to sync and delete successfully synced patients from this device?' 
+          : 'Are you sure you want to sync offline patients?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Proceed'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _isSyncing = true);
+    try {
+      await SyncService.instance.syncPatients(deleteAfterSync: deleteAfter);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sync completed successfully!')),
+        );
+      }
+      ref.refresh(dashboardStatsProvider);
+      ref.read(patientsProvider.notifier).refresh();
+      _loadLastSyncTime();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sync failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final isOnline = ref.watch(isOnlineProvider);
     final statsAsync = ref.watch(dashboardStatsProvider);
     final patientsAsync = ref.watch(patientsProvider);
@@ -51,18 +123,6 @@ class DashboardScreen extends ConsumerWidget {
           ],
         ),
         actions: [
-          IconButton(
-            icon: Icon(Icons.notifications_none, color: AppTheme.white),
-            onPressed: () {},
-          ),
-          CircleAvatar(
-            radius: 16.r,
-            backgroundColor: AppTheme.white.withOpacity(0.2),
-            child: Text(
-              'TA',
-              style: TextStyle(color: AppTheme.white, fontSize: 12.sp),
-            ),
-          ),
           SizedBox(width: 16.w),
         ],
       ),
@@ -85,35 +145,51 @@ class DashboardScreen extends ConsumerWidget {
                         size: 20.sp,
                       ),
                       SizedBox(width: 8.w),
-                      Text(
-                        '0 patients pending sync',
-                        style: TextStyle(
-                          color: AppTheme.statusInProgressText,
-                          fontWeight: FontWeight.w600,
+                      statsAsync.when(
+                        data: (stats) => Text(
+                          '${stats.mediaFilesPending} patients pending sync',
+                          style: TextStyle(
+                            color: AppTheme.statusInProgressText,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
+                        loading: () => const SizedBox(),
+                        error: (_, __) => const SizedBox(),
                       ),
                     ],
                   ),
-                  ElevatedButton.icon(
-                    onPressed: () {},
-                    icon: Icon(
-                      Icons.cloud_upload,
-                      size: 16.sp,
-                      color: AppTheme.white,
+                  if (_isSyncing)
+                    const CircularProgressIndicator()
+                  else
+                    Row(
+                      children: [
+                        ElevatedButton(
+                          onPressed: () => _performSync(false),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryBlue,
+                            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                            minimumSize: Size.zero,
+                          ),
+                          child: Text(
+                            'Sync',
+                            style: TextStyle(color: AppTheme.white, fontSize: 12.sp),
+                          ),
+                        ),
+                        SizedBox(width: 8.w),
+                        ElevatedButton(
+                          onPressed: () => _performSync(true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.accentOrange,
+                            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                            minimumSize: Size.zero,
+                          ),
+                          child: Text(
+                            'Sync & Delete',
+                            style: TextStyle(color: AppTheme.white, fontSize: 12.sp),
+                          ),
+                        ),
+                      ],
                     ),
-                    label: Text(
-                      'Sync Now',
-                      style: TextStyle(color: AppTheme.white),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.accentOrange,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 12.w,
-                        vertical: 8.h,
-                      ),
-                      minimumSize: Size.zero,
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -124,7 +200,7 @@ class DashboardScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Last synced: Yesterday, 12:30 PM',
+                    'Last synced: $_lastSyncTime',
                     style: TextStyle(
                       color: AppTheme.primaryBlue,
                       fontSize: 12.sp,
@@ -153,32 +229,77 @@ class DashboardScreen extends ConsumerWidget {
                       ],
                     ),
                     loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (_, __) => const Center(child: Text('Failed to load stats')),
+                    error: (_, __) => GridView.count(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 12.w,
+                      mainAxisSpacing: 12.h,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      childAspectRatio: 1.8,
+                      children: [
+                        _StatCard('Total Registered Patients', '0'),
+                        _StatCard('Remaining Sync Patients', '0'),
+                      ],
+                    ),
                   ),
 
                   SizedBox(height: 16.h),
                   Row(
                     children: [
-                      Expanded(child: _DateFilterCard('Date from')),
-                      SizedBox(width: 8.w),
-                      Expanded(child: _DateFilterCard('Date to')),
-                      SizedBox(width: 8.w),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 12.w,
-                          vertical: 12.h,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.white,
-                          borderRadius: BorderRadius.circular(20.r),
-                          border: Border.all(
-                            color: AppTheme.textLight.withOpacity(0.2),
+                      Expanded(
+                        child: TextField(
+                          style: TextStyle(fontSize: 12.sp, color: AppTheme.textDark),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            hintText: 'Search patients...',
+                            hintStyle: TextStyle(fontSize: 12.sp, color: AppTheme.textLight),
+                            prefixIcon: Icon(Icons.search, size: 18.sp, color: AppTheme.textLight),
+                            filled: true,
+                            fillColor: AppTheme.white,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12.r),
+                              borderSide: BorderSide(color: AppTheme.textLight.withValues(alpha: 0.2)),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12.r),
+                              borderSide: BorderSide(color: AppTheme.textLight.withValues(alpha: 0.2)),
+                            ),
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            Text('All time', style: TextStyle(fontSize: 12.sp)),
-                            Icon(Icons.keyboard_arrow_down, size: 16.sp),
+                      ),
+                      SizedBox(width: 12.w),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppTheme.white,
+                          borderRadius: BorderRadius.circular(12.r),
+                          border: Border.all(
+                            color: AppTheme.textLight.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: PopupMenuButton<String>(
+                          icon: Icon(Icons.filter_list, color: AppTheme.primaryBlue, size: 20.sp),
+                          position: PopupMenuPosition.under,
+                          onSelected: (value) {
+                            // Filter logic here
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'today',
+                              child: Text('Today registered'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'last_7_days',
+                              child: Text('Last 7 days'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'filter_on_date',
+                              child: Text('Filter on date'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'between_two_dates',
+                              child: Text('Between two dates'),
+                            ),
                           ],
                         ),
                       ),
@@ -321,34 +442,6 @@ class _StatCard extends StatelessWidget {
               fontSize: 20.sp,
               fontWeight: FontWeight.bold,
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DateFilterCard extends StatelessWidget {
-  final String hint;
-
-  const _DateFilterCard(this.hint);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: BorderRadius.circular(20.r),
-        border: Border.all(color: AppTheme.textLight.withOpacity(0.2)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.calendar_today, size: 14.sp, color: AppTheme.primaryBlue),
-          SizedBox(width: 8.w),
-          Text(
-            hint,
-            style: TextStyle(color: AppTheme.textLight, fontSize: 12.sp),
           ),
         ],
       ),

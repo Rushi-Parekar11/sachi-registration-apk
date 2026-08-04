@@ -8,6 +8,7 @@ import '../../dashboard/data/dashboard_provider.dart';
 import 'dart:convert';
 import 'package:go_router/go_router.dart';
 import 'package:country_state_city/country_state_city.dart' as csc;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../domain/patient.dart';
 
 class PatientRegistrationScreen extends ConsumerStatefulWidget {
@@ -77,6 +78,7 @@ class _PatientRegistrationScreenState
 
   bool _ageUndisclosed = true;
   String _ageAtMarriage = '';
+  bool _isLoadingData = true;
 
   @override
   void initState() {
@@ -84,7 +86,58 @@ class _PatientRegistrationScreenState
     _loadCountries();
     if (widget.patient != null) {
       _loadExistingPatient(widget.patient!.id);
+    } else {
+      _loadSettings();
     }
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _country = prefs.getString('country') ?? '';
+      _state = prefs.getString('state') ?? '';
+      _city = prefs.getString('city') ?? '';
+      _pincode = prefs.getString('pincode') ?? '';
+      _block = prefs.getString('block') ?? '';
+      _village = prefs.getString('village') ?? '';
+      
+      final savedVulnerablePop = prefs.getString('vulnerable_population');
+      if (savedVulnerablePop != null && savedVulnerablePop != 'Select') {
+        _vulnerablePopulation = savedVulnerablePop;
+      }
+    });
+    
+    // Attempt to match selected country/state/city for dropdown enablement
+    if (_country.isNotEmpty) {
+      final countries = await csc.getAllCountries();
+      try {
+        _selectedCountry = countries.firstWhere((c) => c.name == _country);
+        if (_selectedCountry != null && _state.isNotEmpty) {
+          final states = await csc.getStatesOfCountry(_selectedCountry!.isoCode);
+          if (mounted) {
+            setState(() {
+              _states = states;
+              _selectedState = states.firstWhere((s) => s.name == _state);
+            });
+            if (_selectedState != null && _city.isNotEmpty) {
+              final cities = await csc.getStateCities(
+                _selectedState!.countryCode,
+                _selectedState!.isoCode,
+              );
+              if (mounted) {
+                setState(() {
+                  _cities = cities;
+                  _selectedCity = cities.firstWhere((c) => c.name == _city);
+                });
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Ignored if not found
+      }
+    }
+    if (mounted) setState(() => _isLoadingData = false);
   }
 
   Future<void> _loadExistingPatient(int id) async {
@@ -173,6 +226,7 @@ class _PatientRegistrationScreenState
         } catch (_) {}
       }
     });
+    if (mounted) setState(() => _isLoadingData = false);
   }
 
   Future<void> _loadCountries() async {
@@ -432,6 +486,7 @@ class _PatientRegistrationScreenState
     bool enabled = true,
     TextInputType type = TextInputType.text,
     Function(String)? onChanged,
+    String? initialValue,
   }) {
     return Padding(
       padding: EdgeInsets.only(bottom: 12.h),
@@ -459,6 +514,7 @@ class _PatientRegistrationScreenState
             SizedBox(height: 4.h),
           ],
           TextFormField(
+            initialValue: initialValue,
             enabled: enabled,
             keyboardType: type,
             style: TextStyle(fontSize: 10.sp, color: AppTheme.textDark),
@@ -761,9 +817,9 @@ class _PatientRegistrationScreenState
         foregroundColor: AppTheme.textDark,
         elevation: 1,
       ),
-      body: SingleChildScrollView(
+      body: _isLoadingData ? const Center(child: CircularProgressIndicator()) : SingleChildScrollView(
         controller: _scrollController,
-        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
         child: Form(
           key: _formKey,
           child: Column(
@@ -958,6 +1014,7 @@ class _PatientRegistrationScreenState
                     child: _buildTextField(
                       'Block',
                       'Enter block',
+                      initialValue: _block,
                       onChanged: (v) => _block = v,
                     ),
                   ),
@@ -969,6 +1026,7 @@ class _PatientRegistrationScreenState
                     child: _buildTextField(
                       'Village',
                       'Enter village',
+                      initialValue: _village,
                       onChanged: (v) => _village = v,
                     ),
                   ),
@@ -979,6 +1037,7 @@ class _PatientRegistrationScreenState
                       'Pincode',
                       isRequired: true,
                       type: TextInputType.number,
+                      initialValue: _pincode,
                       onChanged: (v) => _pincode = v,
                     ),
                   ),

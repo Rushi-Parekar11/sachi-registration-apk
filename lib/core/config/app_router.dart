@@ -7,6 +7,7 @@ import '../../features/dashboard/presentation/dashboard_screen.dart';
 
 import '../../features/patients/presentation/patient_registration_screen.dart';
 import '../../features/patients/domain/patient.dart';
+import '../../features/settings/presentation/settings_screen.dart';
 import '../../shared/widgets/main_scaffold.dart';
 
 
@@ -40,8 +41,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/settings',
-            builder: (context, state) =>
-                const Center(child: Text('Settings (TBD)')),
+            builder: (context, state) => const SettingsScreen(),
           ),
         ],
       ),

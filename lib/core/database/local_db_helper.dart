@@ -140,6 +140,22 @@ CREATE TABLE local_patient_history (
     };
   }
 
+  Future<Map<String, dynamic>?> getPatientHistory(int patientId) async {
+    final db = await instance.database;
+    final res = await db.query('local_patient_history', where: 'patient_id = ?', whereArgs: [patientId]);
+    if (res.isNotEmpty) return res.first;
+    return null;
+  }
+
+  Future<void> deletePatient(int id) async {
+    final db = await instance.database;
+    await db.delete('local_patients', where: 'id = ?', whereArgs: [id]);
+    // Note: patient_history should be deleted automatically if ON DELETE CASCADE is working,
+    // but sqlite requires pragma foreign_keys = ON; which we might not have set.
+    // Let's explicitly delete history just in case.
+    await db.delete('local_patient_history', where: 'patient_id = ?', whereArgs: [id]);
+  }
+
   Future<void> close() async {
     final db = await instance.database;
     db.close();
