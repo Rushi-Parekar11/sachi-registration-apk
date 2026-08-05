@@ -5,10 +5,19 @@ import '../../features/patients/domain/patient.dart';
 
 class PatientCard extends StatelessWidget {
   final Patient patient;
-
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final bool selectionMode;
+  final bool isSelected;
 
-  const PatientCard({super.key, required this.patient, this.onTap});
+  const PatientCard({
+    super.key,
+    required this.patient,
+    this.onTap,
+    this.onLongPress,
+    this.selectionMode = false,
+    this.isSelected = false,
+  });
 
   Color _getStatusColor(String? status) {
     switch (status?.toLowerCase()) {
@@ -77,15 +86,30 @@ class PatientCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12.r),
-        side: BorderSide(color: AppTheme.textLight.withOpacity(0.1)),
+        side: BorderSide(
+          color: isSelected ? AppTheme.primaryBlue : AppTheme.textLight.withOpacity(0.1),
+          width: isSelected ? 2.0 : 1.0,
+        ),
       ),
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(12.r),
         child: Padding(
           padding: EdgeInsets.all(12.w),
           child: Row(
             children: [
+              if (selectionMode)
+                Padding(
+                  padding: EdgeInsets.only(right: 8.w),
+                  child: IgnorePointer(
+                    child: Checkbox(
+                      value: isSelected,
+                      onChanged: (val) {},
+                      activeColor: AppTheme.primaryBlue,
+                    ),
+                  ),
+                ),
               CircleAvatar(
                 radius: 20.r,
                 backgroundColor: AppTheme.primaryBlue,

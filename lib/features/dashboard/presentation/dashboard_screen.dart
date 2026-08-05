@@ -141,20 +141,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     children: [
                       Icon(
                         Icons.sync_disabled,
-                        color: AppTheme.statusInProgressText,
+                        color: AppTheme.accentOrange,
                         size: 20.sp,
                       ),
                       SizedBox(width: 8.w),
-                      statsAsync.when(
-                        data: (stats) => Text(
-                          '${stats.mediaFilesPending} patients pending sync',
-                          style: TextStyle(
-                            color: AppTheme.statusInProgressText,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      Text(
+                        'Offline Mode',
+                        style: TextStyle(
+                          color: AppTheme.accentOrange,
+                          fontWeight: FontWeight.w600,
                         ),
-                        loading: () => const SizedBox(),
-                        error: (_, __) => const SizedBox(),
                       ),
                     ],
                   ),
@@ -163,30 +159,32 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   else
                     Row(
                       children: [
-                        ElevatedButton(
+                        ElevatedButton.icon(
                           onPressed: () => _performSync(false),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.primaryBlue,
-                            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                            foregroundColor: AppTheme.white,
+                            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
                             minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
-                          child: Text(
-                            'Sync',
-                            style: TextStyle(color: AppTheme.white, fontSize: 12.sp),
-                          ),
+                          icon: Icon(Icons.cloud_upload, size: 12.sp),
+                          label: Text('Sync', style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.bold)),
                         ),
                         SizedBox(width: 8.w),
-                        ElevatedButton(
+                        ElevatedButton.icon(
                           onPressed: () => _performSync(true),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.accentOrange,
-                            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                            foregroundColor: AppTheme.white,
+                            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
                             minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
-                          child: Text(
-                            'Sync & Delete',
-                            style: TextStyle(color: AppTheme.white, fontSize: 12.sp),
-                          ),
+                          icon: Icon(Icons.delete, size: 12.sp),
+                          label: Text('Sync & Delete', style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
@@ -209,38 +207,61 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   SizedBox(height: 16.h),
 
                   // Stats Grid
-                  statsAsync.when(
-                    data: (stats) => GridView.count(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12.w,
-                      mainAxisSpacing: 12.h,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      childAspectRatio: 1.8,
-                      children: [
-                        _StatCard(
-                          'Total Registered Patients',
-                          stats.totalPatients.toString(),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      double ratio = constraints.maxWidth > 600 ? 3.0 : 1.8;
+                      return statsAsync.when(
+                        data: (stats) => GridView.count(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12.w,
+                          mainAxisSpacing: 12.h,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          childAspectRatio: ratio,
+                          children: [
+                            _StatCard(
+                              title: 'Total Registered Patients',
+                              value: stats.totalPatients.toString(),
+                              icon: Icons.people,
+                              iconColor: AppTheme.primaryBlue,
+                              iconBgColor: AppTheme.primaryBlue.withOpacity(0.1),
+                            ),
+                            _StatCard(
+                              title: 'Remaining Sync Patients',
+                              value: stats.mediaFilesPending.toString(),
+                              icon: Icons.cloud_upload_outlined,
+                              iconColor: Colors.green,
+                              iconBgColor: Colors.green.withOpacity(0.1),
+                            ),
+                          ],
                         ),
-                        _StatCard(
-                          'Remaining Sync Patients',
-                          stats.mediaFilesPending.toString(),
+                        loading: () => const Center(child: CircularProgressIndicator()),
+                        error: (_, __) => GridView.count(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12.w,
+                          mainAxisSpacing: 12.h,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          childAspectRatio: ratio,
+                          children: [
+                            _StatCard(
+                              title: 'Total Registered Patients',
+                              value: '0',
+                              icon: Icons.people,
+                              iconColor: AppTheme.primaryBlue,
+                              iconBgColor: AppTheme.primaryBlue.withOpacity(0.1),
+                            ),
+                            _StatCard(
+                              title: 'Remaining Sync Patients',
+                              value: '0',
+                              icon: Icons.cloud_upload_outlined,
+                              iconColor: Colors.green,
+                              iconBgColor: Colors.green.withOpacity(0.1),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (_, __) => GridView.count(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12.w,
-                      mainAxisSpacing: 12.h,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      childAspectRatio: 1.8,
-                      children: [
-                        _StatCard('Total Registered Patients', '0'),
-                        _StatCard('Remaining Sync Patients', '0'),
-                      ],
-                    ),
+                      );
+                    }
                   ),
 
                   SizedBox(height: 16.h),
@@ -313,7 +334,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       onPressed: () {
                         context.push('/patient-registration');
                       },
-                      icon: const Icon(Icons.person_add),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryBlue,
+                        foregroundColor: AppTheme.white,
+                        padding: EdgeInsets.symmetric(vertical: 12.h),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8.r),
+                        ),
+                      ),
+                      icon: Icon(Icons.person_add, size: 20.sp),
                       label: Text(
                         'Register New Patient',
                         style: TextStyle(
@@ -337,61 +366,87 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ),
                       SizedBox(width: 8.w),
                       CircleAvatar(
-                        radius: 10.r,
+                        radius: 6.r,
                         backgroundColor: AppTheme.statusInProgressYellow,
-                        child: statsAsync.when(
-                          data: (stats) => Text(
-                            stats.mediaFilesPending.toString(),
-                            style: TextStyle(
-                              color: AppTheme.statusInProgressText,
-                              fontSize: 10.sp,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          loading: () => const SizedBox(),
-                          error: (_, __) => const SizedBox(),
-                        ),
                       ),
                     ],
                   ),
                   SizedBox(height: 12.h),
 
-                  // List of offline patients
-                  patientsAsync.when(
-                    data: (patients) {
-                      final offlinePatients = patients.where((p) => p.status == 'Pending Sync').toList();
-                      if (offlinePatients.isEmpty) {
-                        return Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24.h),
-                          child: Center(
-                            child: Text(
-                              'No offline patients pending sync.',
-                              style: TextStyle(
-                                color: AppTheme.textLight,
-                                fontSize: 14.sp,
+                  // List of offline patients wrapped in a white container
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.all(16.w),
+                    decoration: BoxDecoration(
+                      color: AppTheme.white,
+                      borderRadius: BorderRadius.circular(12.r),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: patientsAsync.when(
+                      data: (patients) {
+                        final offlinePatients = patients.where((p) => p.status == 'Pending Sync').toList();
+                        if (offlinePatients.isEmpty) {
+                          return Padding(
+                            padding: EdgeInsets.symmetric(vertical: 48.h),
+                            child: Center(
+                              child: Column(
+                                children: [
+                                  Icon(Icons.insert_drive_file_outlined, size: 48.sp, color: AppTheme.textLight),
+                                  SizedBox(height: 8.h),
+                                  Text(
+                                    'Failed to load patients',
+                                    style: TextStyle(
+                                      color: AppTheme.textLight,
+                                      fontSize: 12.sp,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                        );
-                      }
-                      
-                      return ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: offlinePatients.length,
-                        itemBuilder: (context, index) {
-                          final patient = offlinePatients[index];
-                          return PatientCard(
-                            patient: patient,
-                            onTap: () {
-                              context.push('/patient-registration', extra: patient);
-                            },
                           );
-                        },
-                      );
-                    },
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (_, __) => const Center(child: Text('Failed to load patients')),
+                        }
+                        
+                        return ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: offlinePatients.length,
+                          itemBuilder: (context, index) {
+                            final patient = offlinePatients[index];
+                            return PatientCard(
+                              patient: patient,
+                              onTap: () {
+                                if (_isSelectionMode) {
+                                  _toggleSelection(patient.id);
+                                } else {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => PatientDetailsDialog(patient: patient),
+                                  );
+                                }
+                              },
+                              selectionMode: _isSelectionMode,
+                              isSelected: _selectedPatientIds.contains(patient.id),
+                              onLongPress: () {
+                                if (!_isSelectionMode) {
+                                  setState(() {
+                                    _isSelectionMode = true;
+                                    _selectedPatientIds.add(patient.id);
+                                  });
+                                }
+                              },
+                            );
+                          },
+                        );
+                      },
+                      loading: () => const Center(child: CircularProgressIndicator()),
+                      error: (_, __) => const Center(child: Text('Failed to load patients')),
+                    ),
                   ),
                 ],
               ),
@@ -406,8 +461,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 class _StatCard extends StatelessWidget {
   final String title;
   final String value;
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBgColor;
 
-  const _StatCard(this.title, this.value);
+  const _StatCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+    required this.iconColor,
+    required this.iconBgColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -424,23 +488,43 @@ class _StatCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            title,
-            style: TextStyle(color: AppTheme.textLight, fontSize: 11.sp),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          Container(
+            padding: EdgeInsets.all(10.w),
+            decoration: BoxDecoration(
+              color: iconBgColor,
+              borderRadius: BorderRadius.circular(8.r),
+            ),
+            child: Icon(
+              icon,
+              color: iconColor,
+              size: 24.sp,
+            ),
           ),
-          SizedBox(height: 4.h),
-          Text(
-            value,
-            style: TextStyle(
-              color: AppTheme.textDark,
-              fontSize: 20.sp,
-              fontWeight: FontWeight.bold,
+          SizedBox(width: 12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(color: AppTheme.textLight, fontSize: 11.sp),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                SizedBox(height: 4.h),
+                Text(
+                  value,
+                  style: TextStyle(
+                    color: AppTheme.textDark,
+                    fontSize: 20.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
           ),
         ],

@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../data/patients_provider.dart';
 import '../../../shared/widgets/patient_card.dart';
 import '../../../core/providers/connectivity_provider.dart';
+import '../../../core/database/local_db_helper.dart';
 
 import '../domain/patient.dart';
 import 'widgets/patient_details_dialog.dart';
@@ -21,6 +22,60 @@ class PatientsScreen extends ConsumerStatefulWidget {
 class _PatientsScreenState extends ConsumerState<PatientsScreen> {
   String? _selectedStatus = 'All';
   String? _selectedViaResult = 'All';
+  
+  bool _isSelectionMode = false;
+  final Set<int> _selectedPatientIds = {};
+
+  void _toggleSelection(int id) {
+    setState(() {
+      if (_selectedPatientIds.contains(id)) {
+        _selectedPatientIds.remove(id);
+        if (_selectedPatientIds.isEmpty) {
+          _isSelectionMode = false;
+        }
+      } else {
+        _selectedPatientIds.add(id);
+      }
+    });
+  }
+
+  void _deleteSelectedPatients() async {
+    if (_selectedPatientIds.isEmpty) return;
+    
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm Deletion'),
+        content: Text('Are you sure you want to delete ${_selectedPatientIds.length} selected patient(s)?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await LocalDbHelper.instance.deletePatients(_selectedPatientIds.toList());
+      setState(() {
+        _isSelectionMode = false;
+        _selectedPatientIds.clear();
+      });
+      ref.read(patientsProvider.notifier).refresh();
+      // Also refresh dashboard stats if available, handled globally or just by patientsProvider
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Selected patients deleted.')),
+        );
+      }
+    }
+  }
 
   Widget _buildHeaderDropdown(String title, String? currentValue, List<String> options, ValueChanged<String?> onChanged) {
     bool isActive = currentValue != null && currentValue != 'All';
@@ -150,53 +205,110 @@ class _PatientsScreenState extends ConsumerState<PatientsScreen> {
                 ),
                 SizedBox(height: 16.h),
 
-                // Search Bar & Filter
-                Row(
-                  children: [
-                    // Search Bar (approx 80%)
-                    Expanded(
-                      flex: 8,
-                      child: Container(
-                        height: 40.h, // reduced height
-                        padding: EdgeInsets.symmetric(horizontal: 16.w),
-                        decoration: BoxDecoration(
-                          color: AppTheme.white,
-                          borderRadius: BorderRadius.circular(20.r),
-                          border: Border.all(
-                            color: AppTheme.textLight.withOpacity(0.2),
+                // Search Bar, Filter, or Selection Action Bar
+                if (_isSelectionMode)
+                  Container(
+                    height: 48.h,
+                    padding: EdgeInsets.symmetric(horizontal: 16.w),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryBlue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          '${_selectedPatientIds.length} Selected',
+                          style: TextStyle(
+                            color: AppTheme.primaryBlue,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14.sp,
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.search,
-                              color: AppTheme.textLight,
-                              size: 18.sp,
-                            ),
-                            SizedBox(width: 8.w),
-                            Expanded(
-                              child: TextField(
-                                decoration: InputDecoration(
-                                  hintText: 'Search by name...',
-                                  hintStyle: TextStyle(
-                                    color: AppTheme.textLight,
-                                    fontSize: 14.sp,
-                                  ),
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              if (_selectedPatientIds.length == filteredPatients.length) {
+                                _selectedPatientIds.clear();
+                                _isSelectionMode = false;
+                              } else {
+                                _selectedPatientIds.addAll(filteredPatients.map((p) => p.id));
+                              }
+                            });
+                          },
+                          child: Text(
+                            _selectedPatientIds.length == filteredPatients.length ? 'Deselect All' : 'Select All',
+                            style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        SizedBox(width: 8.w),
+                        IconButton(
+                          onPressed: _deleteSelectedPatients,
+                          icon: Icon(Icons.delete, color: Colors.red, size: 24.sp),
+                          tooltip: 'Delete Selected',
+                        ),
+                        SizedBox(width: 8.w),
+                        IconButton(
+                          onPressed: () {
+                            setState(() {
+                              _isSelectionMode = false;
+                              _selectedPatientIds.clear();
+                            });
+                          },
+                          icon: Icon(Icons.close, color: AppTheme.textDark, size: 24.sp),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Row(
+                  children: [
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 500),
+                          child: Container(
+                            height: 40.h, // reduced height
+                            padding: EdgeInsets.symmetric(horizontal: 16.w),
+                            decoration: BoxDecoration(
+                              color: AppTheme.white,
+                              borderRadius: BorderRadius.circular(20.r),
+                              border: Border.all(
+                                color: AppTheme.textLight.withOpacity(0.2),
                               ),
                             ),
-                          ],
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.search,
+                                  color: AppTheme.textLight,
+                                  size: 18.sp,
+                                ),
+                                SizedBox(width: 8.w),
+                                Expanded(
+                                  child: TextField(
+                                    decoration: InputDecoration(
+                                      hintText: 'Search by name...',
+                                      hintStyle: TextStyle(
+                                        color: AppTheme.textLight,
+                                        fontSize: 14.sp,
+                                      ),
+                                      border: InputBorder.none,
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
                     SizedBox(width: 12.w),
-                    // Filter Icon (approx 20%)
-                    Expanded(
-                      flex: 2,
-                      child: PopupMenuButton<String>(
+                    // Filter Icon
+                    PopupMenuButton<String>(
                         icon: Container(
                           height: 40.h,
                           decoration: BoxDecoration(
@@ -270,11 +382,25 @@ class _PatientsScreenState extends ConsumerState<PatientsScreen> {
                       final patient = filteredPatients[index];
                       return PatientCard(
                         patient: patient,
+                        selectionMode: _isSelectionMode,
+                        isSelected: _selectedPatientIds.contains(patient.id),
+                        onLongPress: () {
+                          if (!_isSelectionMode) {
+                            setState(() {
+                              _isSelectionMode = true;
+                              _selectedPatientIds.add(patient.id);
+                            });
+                          }
+                        },
                         onTap: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) => PatientDetailsDialog(patient: patient),
-                          );
+                          if (_isSelectionMode) {
+                            _toggleSelection(patient.id);
+                          } else {
+                            showDialog(
+                              context: context,
+                              builder: (context) => PatientDetailsDialog(patient: patient),
+                            );
+                          }
                         },
                       );
                     },

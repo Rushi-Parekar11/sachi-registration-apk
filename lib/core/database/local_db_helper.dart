@@ -156,6 +156,14 @@ CREATE TABLE local_patient_history (
     await db.delete('local_patient_history', where: 'patient_id = ?', whereArgs: [id]);
   }
 
+  Future<void> deletePatients(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await instance.database;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    await db.delete('local_patients', where: 'id IN ($placeholders)', whereArgs: ids);
+    await db.delete('local_patient_history', where: 'patient_id IN ($placeholders)', whereArgs: ids);
+  }
+
   Future<void> close() async {
     final db = await instance.database;
     db.close();
