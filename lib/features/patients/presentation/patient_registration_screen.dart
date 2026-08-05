@@ -1014,13 +1014,7 @@ class _PatientRegistrationScreenState
                     isRequired: true,
                     onChanged: (v) => _maritalStatus = v!,
                   ),
-                  _buildDropdown(
-                    'Status',
-                    'Select',
-                    ['Select'],
-                    isRequired: true,
-                    enabled: false,
-                  ),
+
                   _buildDateField(
                     'Date of Birth',
                     'dd-mm-yyyy',
