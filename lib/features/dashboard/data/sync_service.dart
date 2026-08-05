@@ -63,31 +63,93 @@ class SyncService {
         }
       }
 
+      // --- Sanitize date_of_birth: convert DD/MM/YYYY → YYYY-MM-DD (ISO 8601) ---
+      String? rawDob = patient['date_of_birth'] as String?;
+      String? isoDob;
+      int calculatedAge = 0;
+      if (rawDob != null && rawDob.isNotEmpty) {
+        try {
+          final parts = rawDob.split('/');
+          if (parts.length == 3) {
+            // parts: [DD, MM, YYYY]
+            isoDob = '${parts[2]}-${parts[1].padLeft(2, '0')}-${parts[0].padLeft(2, '0')}';
+            final dob = DateTime(int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
+            final today = DateTime.now();
+            calculatedAge = today.year - dob.year -
+                ((today.month < dob.month || (today.month == dob.month && today.day < dob.day)) ? 1 : 0);
+          }
+        } catch (_) {
+          isoDob = rawDob; // fallback: send as-is
+        }
+      }
+
+      // --- Helper: convert empty/placeholder strings to null ---
+      String? nullIfBlank(dynamic val) {
+        if (val == null) return null;
+        // Trim leading/trailing commas and spaces (address concatenation artifacts)
+        final s = val.toString().trim().replaceAll(RegExp(r'^[,\s]+|[,\s]+$'), '');
+        // Strip strings that are empty, placeholder words, or only punctuation
+        if (s.isEmpty || s.toLowerCase() == 'na' || s.toLowerCase() == 'none') return null;
+        return s;
+      }
+
+      // --- Sanitize history before sending to server ---
+      if (cleanHistory != null) {
+        // Remove local DB-only fields — server does not expect these
+        cleanHistory.remove('id');
+        cleanHistory.remove('patient_id');
+
+        // lmp_date: empty string → null
+        if ((cleanHistory['lmp_date'] as String?)?.isEmpty ?? false) {
+          cleanHistory['lmp_date'] = null;
+        }
+
+        // first_intimate_age of 0 means "not disclosed" — send null
+        if ((cleanHistory['first_intimate_age'] as int?) == 0) {
+          cleanHistory['first_intimate_age'] = null;
+        }
+
+        // hpv_test: SQLite stores as int (0/1), server expects boolean
+        if (cleanHistory['hpv_test'] != null) {
+          cleanHistory['hpv_test'] = cleanHistory['hpv_test'] == 1;
+        }
+
+        // menopause_status / dropdown placeholders: "Select" means user didn't choose
+        final dropdownPlaceholders = {'select', 'none', 'undisclosed', ''};
+        for (final key in ['menopause_status', 'intimately_active', 'multiple_intimate_partners',
+                           'other_med_condition', 'family_cervical_cancer']) {
+          final v = cleanHistory[key]?.toString().toLowerCase().trim() ?? '';
+          if (dropdownPlaceholders.contains(v)) {
+            cleanHistory[key] = null;
+          }
+        }
+      }
+
       // Construct payload mimicking the backend expected model
       final payload = {
         'tenantId': tenantId,
         'patient': {
           'mrn': patient['mrn'],
           'patient_name': patient['patient_name'],
-          'gaurdian_name': patient['gaurdian_name'],
-          'date_of_birth': patient['date_of_birth'],
-          'age': patient['age'],
+          'gaurdian_name': nullIfBlank(patient['gaurdian_name']),
+          'date_of_birth': isoDob,
+          'age': calculatedAge > 0 ? calculatedAge : (patient['age'] as int? ?? 0),
           'maratial_status': patient['maratial_status'],
-          'occupation': patient['occupation'],
+          'occupation': nullIfBlank(patient['occupation']),
           'residential_status': patient['residential_status'],
           'mobile_number': patient['mobile_number']?.toString(),
-          'aadhaar_number': patient['aadhaar_number'],
-          'abha_number': patient['abha_number'],
-          'mail': patient['mail'],
+          'aadhaar_number': nullIfBlank(patient['aadhaar_number']),
+          'abha_number': nullIfBlank(patient['abha_number']),
+          'mail': nullIfBlank(patient['mail']),
           'country': patient['country'],
           'state': patient['state'],
           'city': patient['city'],
-          'pincode': patient['pincode'],
-          'block': patient['block'],
-          'village': patient['village'],
-          'address': patient['address'],
-          'add_line_1': patient['add_line_1'],
-          'add_line_2': patient['add_line_2'],
+          'pincode': nullIfBlank(patient['pincode']),
+          'block': nullIfBlank(patient['block']),
+          'village': nullIfBlank(patient['village']),
+          'address': nullIfBlank(patient['address']),
+          'add_line_1': nullIfBlank(patient['add_line_1']),
+          'add_line_2': nullIfBlank(patient['add_line_2']),
         },
         if (cleanHistory != null) 'history': cleanHistory,
         'mappings': {
@@ -130,6 +192,13 @@ class SyncService {
             await db.updatePatient(patientId, updatedData, history ?? {});
           }
         } else {
+          // Debug: print full payload and server response to help diagnose errors
+          print('=== SYNC DEBUG: Patient $patientId ===');
+          print('Payload sent: ${jsonEncode(payload)}');
+          print('HTTP Status: ${response.statusCode}');
+          print('Server Response: ${response.body}');
+          print('======================================');
+
           // Throw immediately so the snackbar shows the real API error reason
           String apiError = response.body;
           try {
