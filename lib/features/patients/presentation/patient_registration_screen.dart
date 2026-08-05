@@ -902,11 +902,11 @@ class _PatientRegistrationScreenState
         'screening_history_mapping': jsonEncode(
           _screeningHistory.map((test) {
             final res = _screeningTestResults[test];
-            final map = {'test': test};
+            final Map<String, dynamic> map = {'test': test};
             if (res != null) map['result'] = res;
             if (test == 'HPV' && _hpvRiskLevel != null)
               map['riskLevel'] = _hpvRiskLevel!;
-            return {'customValue': jsonEncode(map)};
+            return map; // do NOT double-encode; outer jsonEncode handles serialization
           }).toList(),
         ),
         'substance_usage': jsonEncode(
