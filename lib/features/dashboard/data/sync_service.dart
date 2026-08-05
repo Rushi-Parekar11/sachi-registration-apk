@@ -10,10 +10,14 @@ class SyncService {
 
   Future<void> syncPatients({required bool deleteAfterSync}) async {
     final prefs = await SharedPreferences.getInstance();
-    final tenantId = prefs.getString('tenant_id') ?? '';
+    // Read from SharedPreferences first; fall back to DEV_TENANT_ID from .env
+    final savedTenantId = prefs.getString('tenant_id')?.trim() ?? '';
+    final tenantId = savedTenantId.isNotEmpty
+        ? savedTenantId
+        : (dotenv.env['DEV_TENANT_ID']?.trim() ?? '');
 
     if (tenantId.isEmpty) {
-      throw Exception('Tenant ID is missing in Settings. Please configure it before syncing.');
+      throw Exception('Tenant ID is missing. Please set it in Settings or configure DEV_TENANT_ID in .env.');
     }
 
     final db = LocalDbHelper.instance;
@@ -126,12 +130,19 @@ class SyncService {
             await db.updatePatient(patientId, updatedData, history ?? {});
           }
         } else {
-          print('Failed to sync patient $patientId: ${response.statusCode} - ${response.body}');
+          // Throw immediately so the snackbar shows the real API error reason
+          String apiError = response.body;
+          try {
+            final decoded = jsonDecode(response.body);
+            apiError = decoded['error']?['message'] ?? decoded['message'] ?? response.body;
+          } catch (_) {}
+          throw Exception(
+            'Server rejected patient $patientId (HTTP ${response.statusCode}): $apiError',
+          );
         }
       } catch (e) {
         print('Error syncing patient $patientId: $e');
-        // Stop syncing if network error occurs to avoid silent failures
-        throw Exception('Network error during sync: $e');
+        rethrow;
       }
     }
 
