@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../data/dashboard_provider.dart';
 import '../data/sync_service.dart';
+import '../../../core/database/local_db_helper.dart';
 import '../../patients/data/patients_provider.dart';
 import '../../../shared/widgets/patient_card.dart';
 
@@ -34,6 +35,49 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         _selectedPatientIds.add(id);
       }
     });
+  }
+
+  Future<void> _deleteSelectedPatients() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Patients'),
+        content: Text('Are you sure you want to delete ${_selectedPatientIds.length} offline patient(s)?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await LocalDbHelper.instance.deletePatients(_selectedPatientIds.toList());
+      setState(() {
+        _isSelectionMode = false;
+        _selectedPatientIds.clear();
+      });
+      ref.refresh(patientsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Patients deleted successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error deleting patients: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -369,20 +413,65 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
                   SizedBox(height: 24.h),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Offline Patients',
-                        style: TextStyle(
-                          fontSize: 18.sp,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textDark,
+                      Row(
+                        children: [
+                          Text(
+                            'Offline Patients (${patientsAsync.value?.where((p) => p.status == 'Pending Sync').length ?? 0})',
+                            style: TextStyle(
+                              fontSize: 18.sp,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textDark,
+                            ),
+                          ),
+                          SizedBox(width: 8.w),
+                          CircleAvatar(
+                            radius: 6.r,
+                            backgroundColor: AppTheme.statusInProgressYellow,
+                          ),
+                        ],
+                      ),
+                      if (_isSelectionMode)
+                        Row(
+                          children: [
+                            TextButton.icon(
+                              onPressed: () {
+                                final offlinePatients = patientsAsync.value?.where((p) => p.status == 'Pending Sync').toList() ?? [];
+                                setState(() {
+                                  if (_selectedPatientIds.length == offlinePatients.length) {
+                                    _selectedPatientIds.clear();
+                                  } else {
+                                    _selectedPatientIds.addAll(offlinePatients.map((p) => p.id));
+                                  }
+                                });
+                              },
+                              icon: Icon(Icons.done_all, size: 16.sp, color: AppTheme.primaryBlue),
+                              label: Text(
+                                'Select All',
+                                style: TextStyle(color: AppTheme.primaryBlue, fontSize: 12.sp),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: _selectedPatientIds.isEmpty ? null : _deleteSelectedPatients,
+                              icon: Icon(Icons.delete_outline, color: _selectedPatientIds.isEmpty ? Colors.grey : Colors.red, size: 20.sp),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                            SizedBox(width: 8.w),
+                            IconButton(
+                              onPressed: () {
+                                setState(() {
+                                  _isSelectionMode = false;
+                                  _selectedPatientIds.clear();
+                                });
+                              },
+                              icon: Icon(Icons.close, color: AppTheme.textDark, size: 20.sp),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                          ],
                         ),
-                      ),
-                      SizedBox(width: 8.w),
-                      CircleAvatar(
-                        radius: 6.r,
-                        backgroundColor: AppTheme.statusInProgressYellow,
-                      ),
                     ],
                   ),
                   SizedBox(height: 12.h),
@@ -438,10 +527,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 if (_isSelectionMode) {
                                   _toggleSelection(patient.id);
                                 } else {
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) => PatientDetailsDialog(patient: patient),
-                                  );
+                                  context.push('/patient-registration', extra: patient);
                                 }
                               },
                               selectionMode: _isSelectionMode,

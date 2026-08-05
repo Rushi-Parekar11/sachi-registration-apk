@@ -993,9 +993,42 @@ class _PatientRegistrationScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.white, // One plain white background
-      appBar: AppBar(
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        
+        if (widget.patient != null) {
+          final shouldSave = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Unsaved Changes'),
+              content: const Text('You want to save latest changes?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('No'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Yes'),
+                ),
+              ],
+            ),
+          );
+          
+          if (shouldSave == true) {
+            _submitForm(reset: false);
+          } else {
+            if (context.mounted) context.pop();
+          }
+        } else {
+          context.pop();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppTheme.white, // One plain white background
+        appBar: AppBar(
         title: Text(
           'New Patient Registration',
           style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.bold),
@@ -1872,6 +1905,6 @@ class _PatientRegistrationScreenState
           ),
         ),
       ),
-    );
+    ));
   }
 }
