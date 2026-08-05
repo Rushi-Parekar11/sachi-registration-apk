@@ -580,7 +580,13 @@ class _PatientRegistrationScreenState
                 try {
                   final parts = value.split('-');
                   if (parts.length == 3) {
-                    initialDate = DateTime(int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
+                    if (parts[0].length == 4) {
+                      // YYYY-MM-DD format
+                      initialDate = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+                    } else {
+                      // DD-MM-YYYY legacy format
+                      initialDate = DateTime(int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
+                    }
                   }
                 } catch (e) {}
               }
@@ -608,7 +614,8 @@ class _PatientRegistrationScreenState
                 },
               );
               if (pickedDate != null) {
-                String formattedDate = "${pickedDate.day.toString().padLeft(2, '0')}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.year}";
+                // Store as YYYY-MM-DD (ISO 8601) — matches the API expected format
+                String formattedDate = "${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}";
                 onChanged(formattedDate);
                 controller.text = formattedDate;
               }
@@ -828,6 +835,17 @@ class _PatientRegistrationScreenState
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
 
+      // --- Validate Date of Birth (date picker doesn't trigger form validation) ---
+      if (_dob.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Date of Birth is required. Please select a date.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
       final db = LocalDbHelper.instance;
 
       // Auto-generate a dummy MRN for local storage (will be replaced by backend or sent as AUTO)
@@ -838,14 +856,18 @@ class _PatientRegistrationScreenState
         if (_dob.isNotEmpty) {
           final parts = _dob.split('-');
           if (parts.length == 3) {
-            int year = int.parse(
-              parts.last.length == 4 ? parts.last : parts.first,
-            );
-            calculatedAge = DateTime.now().year - year;
+            // DOB is now always stored as YYYY-MM-DD, so parts[0] is the year
+            final year = int.parse(parts[0].length == 4 ? parts[0] : parts[2]);
+            final month = int.parse(parts[0].length == 4 ? parts[1] : parts[1]);
+            final day = int.parse(parts[0].length == 4 ? parts[2] : parts[0]);
+            final dob = DateTime(year, month, day);
+            final today = DateTime.now();
+            calculatedAge = today.year - dob.year -
+                ((today.month < dob.month || (today.month == dob.month && today.day < dob.day)) ? 1 : 0);
           }
         }
       } catch (e) {
-        calculatedAge = 30; // fallback
+        calculatedAge = 0;
       }
 
       final patientData = {
@@ -900,14 +922,15 @@ class _PatientRegistrationScreenState
           _symptoms.map((s) => {'customValue': s}).toList(),
         ),
         'screening_history_mapping': jsonEncode(
-          _screeningHistory.map((test) {
-            final res = _screeningTestResults[test];
-            final Map<String, dynamic> map = {'test': test};
-            if (res != null) map['result'] = res;
-            if (test == 'HPV' && _hpvRiskLevel != null)
-              map['riskLevel'] = _hpvRiskLevel!;
-            return map; // do NOT double-encode; outer jsonEncode handles serialization
-          }).toList(),
+          _screeningHistory
+              .where((test) => _screeningTestResults.containsKey(test)) // only save tests with a result
+              .map((test) {
+                final res = _screeningTestResults[test];
+                final Map<String, dynamic> map = {'test': test, 'result': res};
+                if (test == 'HPV' && _hpvRiskLevel != null)
+                  map['riskLevel'] = _hpvRiskLevel!;
+                return map;
+              }).toList(),
         ),
         'substance_usage': jsonEncode(
           _substanceUsage.map((s) => {'customValue': s}).toList(),
@@ -1165,14 +1188,7 @@ class _PatientRegistrationScreenState
                     initialValue: _village,
                     onChanged: (v) => _village = v,
                   ),
-                  _buildTextField(
-                    'Pincode',
-                    'Pincode',
-                    isRequired: true,
-                    type: TextInputType.number,
-                    initialValue: _pincode,
-                    onChanged: (v) => _pincode = v,
-                  ),
+
                 ],
               ),
               SizedBox(height: 12.h),

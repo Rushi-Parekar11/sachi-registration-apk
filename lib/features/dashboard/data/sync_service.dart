@@ -24,7 +24,10 @@ class SyncService {
     final pendingPatients = await db.getPatients(); // gets all patients, but we should only sync those pending
 
     final String baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://localhost:3109/api/v1/sachi';
-    final url = Uri.parse('$baseUrl/transition/patients');
+    // tenantId goes in the URL query param — matching how the web app hits the API
+    final url = Uri.parse('$baseUrl/transition/patients').replace(
+      queryParameters: {'tenantId': tenantId},
+    );
 
     int syncedCount = 0;
     List<int> toDeleteIds = [];
@@ -63,33 +66,53 @@ class SyncService {
         }
       }
 
-      // --- Sanitize date_of_birth: convert DD/MM/YYYY → YYYY-MM-DD (ISO 8601) ---
+      // --- Sanitize date_of_birth: ensure it's in YYYY-MM-DD format ---
       String? rawDob = patient['date_of_birth'] as String?;
       String? isoDob;
       int calculatedAge = 0;
-      if (rawDob != null && rawDob.isNotEmpty) {
-        try {
+
+      // Guard: skip patient if DOB is missing — server requires it
+      if (rawDob == null || rawDob.isEmpty) {
+        print('Skipping patient $patientId: Date of Birth is missing.');
+        throw Exception('Patient $patientId is missing Date of Birth. Please edit the patient and add DOB before syncing.');
+      }
+
+      try {
+        if (rawDob.contains('/')) {
+          // Stored as DD/MM/YYYY — convert to YYYY-MM-DD
           final parts = rawDob.split('/');
           if (parts.length == 3) {
-            // parts: [DD, MM, YYYY]
             isoDob = '${parts[2]}-${parts[1].padLeft(2, '0')}-${parts[0].padLeft(2, '0')}';
             final dob = DateTime(int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
             final today = DateTime.now();
             calculatedAge = today.year - dob.year -
                 ((today.month < dob.month || (today.month == dob.month && today.day < dob.day)) ? 1 : 0);
           }
-        } catch (_) {
+        } else if (rawDob.contains('-')) {
+          // Already in YYYY-MM-DD format (from date picker)
+          isoDob = rawDob;
+          final parts = rawDob.split('-');
+          if (parts.length == 3) {
+            final dob = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+            final today = DateTime.now();
+            calculatedAge = today.year - dob.year -
+                ((today.month < dob.month || (today.month == dob.month && today.day < dob.day)) ? 1 : 0);
+          }
+        } else {
           isoDob = rawDob; // fallback: send as-is
         }
+      } catch (_) {
+        isoDob = rawDob; // fallback: send as-is
       }
+
 
       // --- Helper: convert empty/placeholder strings to null ---
       String? nullIfBlank(dynamic val) {
         if (val == null) return null;
         // Trim leading/trailing commas and spaces (address concatenation artifacts)
         final s = val.toString().trim().replaceAll(RegExp(r'^[,\s]+|[,\s]+$'), '');
-        // Strip strings that are empty, placeholder words, or only punctuation
-        if (s.isEmpty || s.toLowerCase() == 'na' || s.toLowerCase() == 'none') return null;
+        // Only strip truly empty or non-data strings (NOT 'none'/'undisclosed' — those are valid server values)
+        if (s.isEmpty || s.toLowerCase() == 'na') return null;
         return s;
       }
 
@@ -114,22 +137,37 @@ class SyncService {
           cleanHistory['hpv_test'] = cleanHistory['hpv_test'] == 1;
         }
 
-        // menopause_status / dropdown placeholders: "Select" means user didn't choose
-        final dropdownPlaceholders = {'select', 'none', 'undisclosed', ''};
+        // Only null out true unset placeholders — 'Select' means nothing chosen.
+        // 'None', 'No', 'undisclosed' are VALID values the server accepts.
         for (final key in ['menopause_status', 'intimately_active', 'multiple_intimate_partners',
                            'other_med_condition', 'family_cervical_cancer']) {
-          final v = cleanHistory[key]?.toString().toLowerCase().trim() ?? '';
-          if (dropdownPlaceholders.contains(v)) {
+          final v = cleanHistory[key]?.toString().trim() ?? '';
+          if (v.toLowerCase() == 'select' || v.isEmpty) {
             cleanHistory[key] = null;
           }
         }
+        // Server is case-sensitive: normalize these to lowercase
+        for (final key in ['intimately_active', 'multiple_intimate_partners']) {
+          if (cleanHistory[key] != null) {
+            cleanHistory[key] = cleanHistory[key].toString().toLowerCase();
+          }
+        }
+        // Remove fields not expected by the server (web app doesn't send these)
+        cleanHistory.remove('lmp_date');
+        cleanHistory.remove('first_intimate_age');
+        cleanHistory.remove('live_children');
       }
 
-      // Construct payload mimicking the backend expected model
+      // Construct payload matching the web app's working API format
+      final Map<String, dynamic> mappings = {};
+      if (symptoms.isNotEmpty) mappings['symptoms'] = symptoms;
+      if (screeningHistory.isNotEmpty) mappings['screeningHistory'] = screeningHistory;
+      if (substances.isNotEmpty) mappings['substances'] = substances;
+
       final payload = {
-        'tenantId': tenantId,
+        // tenantId is sent as URL query param — NOT in body (matches web app)
         'patient': {
-          'mrn': patient['mrn'],
+          'mrn': 'AUTO', // server generates the real MRN
           'patient_name': patient['patient_name'],
           'gaurdian_name': nullIfBlank(patient['gaurdian_name']),
           'date_of_birth': isoDob,
@@ -137,10 +175,12 @@ class SyncService {
           'maratial_status': patient['maratial_status'],
           'occupation': nullIfBlank(patient['occupation']),
           'residential_status': patient['residential_status'],
-          'mobile_number': patient['mobile_number']?.toString(),
+          'mobile_number': patient['mobile_number'] is int
+              ? patient['mobile_number']
+              : int.tryParse(patient['mobile_number']?.toString() ?? '') ?? 0,
           'aadhaar_number': nullIfBlank(patient['aadhaar_number']),
           'abha_number': nullIfBlank(patient['abha_number']),
-          'mail': nullIfBlank(patient['mail']),
+          'mail': patient['mail'] ?? '',
           'country': patient['country'],
           'state': patient['state'],
           'city': patient['city'],
@@ -148,15 +188,11 @@ class SyncService {
           'block': nullIfBlank(patient['block']),
           'village': nullIfBlank(patient['village']),
           'address': nullIfBlank(patient['address']),
-          'add_line_1': nullIfBlank(patient['add_line_1']),
-          'add_line_2': nullIfBlank(patient['add_line_2']),
+          'add_line_1': patient['add_line_1'] != null && patient['add_line_1'].toString().isNotEmpty ? patient['add_line_1'] : '',
+          'add_line_2': patient['add_line_2'] != null && patient['add_line_2'].toString().isNotEmpty ? patient['add_line_2'] : '',
         },
         if (cleanHistory != null) 'history': cleanHistory,
-        'mappings': {
-          'symptoms': symptoms,
-          'screeningHistory': screeningHistory,
-          'substances': substances,
-        }
+        'mappings': mappings,
       };
 
       try {
