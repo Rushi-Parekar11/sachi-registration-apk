@@ -146,6 +146,12 @@ class SyncService {
             cleanHistory[key] = null;
           }
         }
+        // Server is case-sensitive: normalize these to lowercase
+        for (final key in ['intimately_active', 'multiple_intimate_partners']) {
+          if (cleanHistory[key] != null) {
+            cleanHistory[key] = cleanHistory[key].toString().toLowerCase();
+          }
+        }
         // Remove fields not expected by the server (web app doesn't send these)
         cleanHistory.remove('lmp_date');
         cleanHistory.remove('first_intimate_age');
@@ -182,8 +188,8 @@ class SyncService {
           'block': nullIfBlank(patient['block']),
           'village': nullIfBlank(patient['village']),
           'address': nullIfBlank(patient['address']),
-          'add_line_1': nullIfBlank(patient['add_line_1']),
-          'add_line_2': nullIfBlank(patient['add_line_2']),
+          'add_line_1': patient['add_line_1'] != null && patient['add_line_1'].toString().isNotEmpty ? patient['add_line_1'] : '',
+          'add_line_2': patient['add_line_2'] != null && patient['add_line_2'].toString().isNotEmpty ? patient['add_line_2'] : '',
         },
         if (cleanHistory != null) 'history': cleanHistory,
         'mappings': mappings,
