@@ -10,6 +10,7 @@ import '../../patients/data/patients_provider.dart';
 import '../../../shared/widgets/patient_card.dart';
 
 import '../../../core/providers/connectivity_provider.dart';
+import '../../patients/presentation/widgets/patient_details_dialog.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -21,6 +22,19 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _isSyncing = false;
   String _lastSyncTime = 'Never';
+  bool _isSelectionMode = false;
+  final Set<int> _selectedPatientIds = {};
+
+  void _toggleSelection(int id) {
+    setState(() {
+      if (_selectedPatientIds.contains(id)) {
+        _selectedPatientIds.remove(id);
+        if (_selectedPatientIds.isEmpty) _isSelectionMode = false;
+      } else {
+        _selectedPatientIds.add(id);
+      }
+    });
+  }
 
   @override
   void initState() {
