@@ -239,20 +239,34 @@ class _PatientRegistrationScreenState
             final List screen = jsonDecode(
               history['screening_history_mapping'],
             );
-            _screeningHistory.clear();
-            _screeningTestResults.clear();
+            final List<String> restoredHistory = [];
+            final Map<String, String> restoredResults = {};
             for (var item in screen) {
-              final val = jsonDecode(item['customValue']);
-              _screeningHistory.add(val['test']);
-              if (val['result'] != null) {
-                _screeningTestResults[val['test']] = val['result'];
+              // customValue may be a JSON string (double-encoded) or already a Map
+              dynamic val;
+              if (item['customValue'] is String) {
+                val = jsonDecode(item['customValue']);
+              } else {
+                val = item['customValue'];
+              }
+              if (val == null || val['test'] == null) continue;
+              final String testName = val['test'] as String;
+              restoredHistory.add(testName);
+              if (val['result'] != null && (val['result'] as String).isNotEmpty) {
+                restoredResults[testName] = val['result'] as String;
               }
               if (val['riskLevel'] != null) {
-                _hpvRiskLevel = val['riskLevel'];
+                _hpvRiskLevel = val['riskLevel'] as String;
               }
             }
+            _screeningHistory = restoredHistory;
+            _screeningTestResults
+              ..clear()
+              ..addAll(restoredResults);
           }
-        } catch (_) {}
+        } catch (e) {
+          print('Error restoring screening history: $e');
+        }
       }
     });
     if (mounted) setState(() => _isLoadingData = false);
