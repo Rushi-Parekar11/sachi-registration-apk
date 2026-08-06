@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
@@ -532,7 +533,7 @@ class _PatientRegistrationScreenState
             readOnly: true,
             style: TextStyle(fontSize: 12.sp, color: AppTheme.textDark),
             decoration: InputDecoration(
-              isDense: true,
+              isDense: true, isExpanded: true,
               filled: true,
               fillColor: enabled ? AppTheme.white : AppTheme.backgroundLight,
               hintText: hint,
@@ -654,6 +655,9 @@ class _PatientRegistrationScreenState
     TextInputType type = TextInputType.text,
     Function(String)? onChanged,
     String? initialValue,
+    String? Function(String?)? validator,
+    List<TextInputFormatter>? inputFormatters,
+    int? maxLength,
   }) {
     return Padding(
       padding: EdgeInsets.only(bottom: 12.h),
@@ -686,7 +690,7 @@ class _PatientRegistrationScreenState
             keyboardType: type,
             style: TextStyle(fontSize: 12.sp, color: AppTheme.textDark),
             decoration: InputDecoration(
-              isDense: true,
+              isDense: true, isExpanded: true,
               filled: true,
               fillColor: enabled ? AppTheme.white : AppTheme.backgroundLight,
               hintText: hint,
@@ -711,7 +715,8 @@ class _PatientRegistrationScreenState
                 borderRadius: BorderRadius.circular(24.r),
                 borderSide: BorderSide(color: AppTheme.primaryBlue),
               ),
-              errorStyle: const TextStyle(height: 0, color: Colors.transparent),
+              errorMaxLines: 2,
+              errorStyle: TextStyle(color: Colors.red, fontSize: 10.sp, height: 1.2),
               errorBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(24.r),
                 borderSide: const BorderSide(color: Colors.red),
@@ -727,9 +732,12 @@ class _PatientRegistrationScreenState
                 ),
               ),
             ),
-            validator: (value) {
+            inputFormatters: inputFormatters,
+            maxLength: maxLength,
+            buildCounter: (BuildContext context, { int? currentLength, int? maxLength, bool? isFocused }) => null,
+            validator: validator ?? (value) {
               if (isRequired && (value == null || value.isEmpty)) {
-                return '';
+                return 'This field is required';
               }
               return null;
             },
@@ -773,7 +781,7 @@ class _PatientRegistrationScreenState
           SizedBox(height: 4.h),
           DropdownButtonFormField<String>(
             value: value,
-            isDense: true,
+            isDense: true, isExpanded: true,
             decoration: InputDecoration(
               filled: true,
               fillColor: enabled ? AppTheme.white : AppTheme.backgroundLight,
@@ -793,7 +801,8 @@ class _PatientRegistrationScreenState
                   color: AppTheme.textLight.withOpacity(0.3),
                 ),
               ),
-              errorStyle: const TextStyle(height: 0, color: Colors.transparent),
+              errorMaxLines: 2,
+              errorStyle: TextStyle(color: Colors.red, fontSize: 10.sp, height: 1.2),
               errorBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(24.r),
                 borderSide: const BorderSide(color: Colors.red),
@@ -821,7 +830,7 @@ class _PatientRegistrationScreenState
             validator: (val) {
               if (isRequired &&
                   (val == null || val.isEmpty || val == 'Select')) {
-                return '';
+                return 'This selection is required';
               }
               return null;
             },
@@ -923,13 +932,12 @@ class _PatientRegistrationScreenState
         ),
         'screening_history_mapping': jsonEncode(
           _screeningHistory
-              .where((test) => _screeningTestResults.containsKey(test)) // only save tests with a result
               .map((test) {
-                final res = _screeningTestResults[test];
+                final res = _screeningTestResults[test] ?? '';
                 final Map<String, dynamic> map = {'test': test, 'result': res};
                 if (test == 'HPV' && _hpvRiskLevel != null)
                   map['riskLevel'] = _hpvRiskLevel!;
-                return map;
+                return {'customValue': jsonEncode(map)};
               }).toList(),
         ),
         'substance_usage': jsonEncode(
@@ -993,9 +1001,42 @@ class _PatientRegistrationScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.white, // One plain white background
-      appBar: AppBar(
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        
+        if (widget.patient != null) {
+          final shouldSave = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Unsaved Changes'),
+              content: const Text('You want to save latest changes?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('No'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Yes'),
+                ),
+              ],
+            ),
+          );
+          
+          if (shouldSave == true) {
+            _submitForm(reset: false);
+          } else {
+            if (context.mounted) context.pop();
+          }
+        } else {
+          context.pop();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppTheme.white, // One plain white background
+        appBar: AppBar(
         title: Text(
           'New Patient Registration',
           style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.bold),
@@ -1022,6 +1063,12 @@ class _PatientRegistrationScreenState
                     isRequired: true,
                     initialValue: _patientName,
                     onChanged: (v) => _patientName = v,
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]'))],
+                    validator: (val) {
+                      if (val == null || val.trim().isEmpty) return 'This field is required';
+                      if (val.trim().length < 2) return 'Must be at least 2 characters';
+                      return null;
+                    },
                   ),
                   _buildTextField(
                     "Husband's / Father's Name",
@@ -1029,6 +1076,11 @@ class _PatientRegistrationScreenState
                     isRequired: true,
                     initialValue: _guardianName,
                     onChanged: (v) => _guardianName = v,
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]'))],
+                    validator: (val) {
+                      if (val == null || val.trim().isEmpty) return 'This field is required';
+                      return null;
+                    },
                   ),
                   _buildDropdown(
                     'Marital Status',
@@ -1051,13 +1103,28 @@ class _PatientRegistrationScreenState
                     isRequired: true,
                     type: TextInputType.phone,
                     initialValue: _phone,
+                    maxLength: 10,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (v) => _phone = v,
+                    validator: (val) {
+                      if (val == null || val.trim().isEmpty) return 'This field is required';
+                      if (!RegExp(r'^\d{10}$').hasMatch(val.trim())) return 'Phone must be exactly 10 digits';
+                      return null;
+                    },
                   ),
                   _buildTextField(
                     'Aadhaar No.',
                     'Aadhaar',
                     initialValue: _aadhaar,
+                    maxLength: 12,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (v) => _aadhaar = v,
+                    validator: (val) {
+                      if (val != null && val.trim().isNotEmpty) {
+                        if (!RegExp(r'^\d{12}$').hasMatch(val.trim())) return 'Aadhaar must be exactly 12 digits';
+                      }
+                      return null;
+                    },
                   ),
                 ],
               ),
@@ -1068,7 +1135,15 @@ class _PatientRegistrationScreenState
                     'ABHA No.',
                     'ABHA',
                     initialValue: _abha,
+                    maxLength: 14,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (v) => _abha = v,
+                    validator: (val) {
+                      if (val != null && val.trim().isNotEmpty) {
+                        if (!RegExp(r'^\d{14}$').hasMatch(val.trim())) return 'ABHA must be exactly 14 digits';
+                      }
+                      return null;
+                    },
                   ),
                   _buildSearchableDropdown(
                     'Country',
@@ -1148,9 +1223,14 @@ class _PatientRegistrationScreenState
                     'Pincode',
                     'Pincode',
                     isRequired: true,
-                    type: TextInputType.number,
+                    type: TextInputType.text,
                     initialValue: _pincode,
                     onChanged: (v) => _pincode = v,
+                    validator: (val) {
+                      if (val == null || val.trim().isEmpty) return 'This field is required';
+                      if (!RegExp(r'^[a-zA-Z0-9\s-]{4,10}$').hasMatch(val.trim())) return 'Please enter a valid pincode (4-10 characters)';
+                      return null;
+                    },
                   ),
                 ],
               ),
@@ -1180,13 +1260,23 @@ class _PatientRegistrationScreenState
                     'Block',
                     'xyz',
                     initialValue: _block,
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]'))],
                     onChanged: (v) => _block = v,
+                    validator: (val) {
+                      if (val != null && val.isNotEmpty && val.trim().isEmpty) return 'Cannot be only spaces';
+                      return null;
+                    },
                   ),
                   _buildTextField(
                     'Village',
                     'Enter village',
                     initialValue: _village,
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]'))],
                     onChanged: (v) => _village = v,
+                    validator: (val) {
+                      if (val != null && val.isNotEmpty && val.trim().isEmpty) return 'Cannot be only spaces';
+                      return null;
+                    },
                   ),
 
                 ],
@@ -1368,7 +1458,7 @@ class _PatientRegistrationScreenState
                             Expanded(
                               child: DropdownButtonFormField<String>(
                                 value: _screeningTestResults[test],
-                                isDense: true,
+                                isDense: true, isExpanded: true,
                                 decoration: InputDecoration(
                                   filled: true,
                                   fillColor: AppTheme.white,
@@ -1430,7 +1520,7 @@ class _PatientRegistrationScreenState
                               Expanded(
                                 child: DropdownButtonFormField<String>(
                                   value: _hpvRiskLevel,
-                                  isDense: true,
+                                  isDense: true, isExpanded: true,
                                   decoration: InputDecoration(
                                     contentPadding: EdgeInsets.symmetric(
                                       horizontal: 12.w,
@@ -1761,7 +1851,16 @@ class _PatientRegistrationScreenState
                       enabled: !_ageUndisclosed,
                       type: TextInputType.number,
                       initialValue: _firstIntimateAge,
+                      maxLength: 3,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       onChanged: (v) => _firstIntimateAge = v,
+                      validator: (val) {
+                        if (val != null && val.trim().isNotEmpty) {
+                          final num = int.tryParse(val.trim());
+                          if (num == null || num < 0) return 'Must be >= 0';
+                        }
+                        return null;
+                      },
                     ),
                   ),
                 ],
@@ -1777,42 +1876,96 @@ class _PatientRegistrationScreenState
                     '0',
                     type: TextInputType.number,
                     initialValue: _totalPregnancies,
+                    maxLength: 2,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (v) => _totalPregnancies = v,
+                    validator: (val) {
+                      if (val != null && val.isNotEmpty) {
+                        final num = int.tryParse(val);
+                        if (num == null || num < 0 || num > 99) return '0-99';
+                      }
+                      return null;
+                    },
                   ),
                   _buildTextField(
                     'Normal Deliveries',
                     '0',
                     type: TextInputType.number,
                     initialValue: _normalDeliveries,
+                    maxLength: 2,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (v) => _normalDeliveries = v,
+                    validator: (val) {
+                      if (val != null && val.isNotEmpty) {
+                        final num = int.tryParse(val);
+                        if (num == null || num < 0 || num > 99) return '0-99';
+                      }
+                      return null;
+                    },
                   ),
                   _buildTextField(
                     'Pre-term Deliveries',
                     '0',
                     type: TextInputType.number,
                     initialValue: _pretermDeliveries,
+                    maxLength: 2,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (v) => _pretermDeliveries = v,
+                    validator: (val) {
+                      if (val != null && val.isNotEmpty) {
+                        final num = int.tryParse(val);
+                        if (num == null || num < 0 || num > 99) return '0-99';
+                      }
+                      return null;
+                    },
                   ),
                   _buildTextField(
                     'C-Section Deliveries',
                     '0',
                     type: TextInputType.number,
                     initialValue: _csectionDeliveries,
+                    maxLength: 2,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (v) => _csectionDeliveries = v,
+                    validator: (val) {
+                      if (val != null && val.isNotEmpty) {
+                        final num = int.tryParse(val);
+                        if (num == null || num < 0 || num > 99) return '0-99';
+                      }
+                      return null;
+                    },
                   ),
                   _buildTextField(
                     'Abortions & Miscarriages',
                     '0',
                     type: TextInputType.number,
                     initialValue: _abortions,
+                    maxLength: 2,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (v) => _abortions = v,
+                    validator: (val) {
+                      if (val != null && val.isNotEmpty) {
+                        final num = int.tryParse(val);
+                        if (num == null || num < 0 || num > 99) return '0-99';
+                      }
+                      return null;
+                    },
                   ),
                   _buildTextField(
                     'Live Children',
                     '0',
                     type: TextInputType.number,
                     initialValue: _liveChildren,
+                    maxLength: 2,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (v) => _liveChildren = v,
+                    validator: (val) {
+                      if (val != null && val.isNotEmpty) {
+                        final num = int.tryParse(val);
+                        if (num == null || num < 0 || num > 99) return '0-99';
+                      }
+                      return null;
+                    },
                   ),
                 ],
               ),
@@ -1872,6 +2025,6 @@ class _PatientRegistrationScreenState
           ),
         ),
       ),
-    );
+    ));
   }
 }

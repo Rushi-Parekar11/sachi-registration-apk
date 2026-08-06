@@ -137,7 +137,7 @@ class PatientCard extends StatelessWidget {
                     ),
                     SizedBox(height: 2.h),
                     Text(
-                      'Screening date: ${patient.lastVisitDate?.split('T').first ?? "N/A"}',
+                      'Registration date: ${patient.lastVisitDate?.split('T').first ?? "N/A"}',
                       style: TextStyle(
                         fontSize: 11.sp,
                         color: AppTheme.textLight,
@@ -146,12 +146,13 @@ class PatientCard extends StatelessWidget {
                   ],
                 ),
               ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildStatusChip(patient.status),
-                  _buildStatusChip(patient.viaTestResult?.isNotEmpty == true ? patient.viaTestResult! : 'N/A'),
-                ],
+              Text(
+                'Age: ${patient.age ?? "N/A"}',
+                style: TextStyle(
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textDark,
+                ),
               ),
             ],
           ),

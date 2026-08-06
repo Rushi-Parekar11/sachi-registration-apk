@@ -256,6 +256,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.key,
             ),
             SizedBox(height: 24.h),
+
             Text(
               'Location Settings',
               style: TextStyle(

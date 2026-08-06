@@ -18,11 +18,22 @@ class PatientsNotifier extends AsyncNotifier<List<Patient>> {
     final dbPatients = await LocalDbHelper.instance.getPatients();
     _totalCount = dbPatients.length;
     return dbPatients.map((row) {
+      final mrn = row['mrn'] as String?;
+      String? regDate;
+      if (mrn != null && mrn.startsWith('LOCAL-')) {
+        try {
+          final timestamp = int.parse(mrn.split('-')[1]);
+          final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
+          regDate = "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+        } catch (_) {}
+      }
+
       return Patient(
         id: row['id'] as int,
         patientName: (row['patient_name'] ?? 'Unknown') as String,
         status: row['sync_status'] == 0 ? 'Pending Sync' : 'Synced',
         age: row['age'] as int?,
+        lastVisitDate: regDate,
       );
     }).toList();
   }
