@@ -16,6 +16,12 @@ class SyncService {
         ? savedTenantId
         : (dotenv.env['DEV_TENANT_ID']?.trim() ?? '');
 
+    // Read Auth Token from SharedPreferences first; fall back to AUTH_TOKEN from .env
+    final savedToken = prefs.getString('auth_token')?.trim() ?? '';
+    final authToken = savedToken.isNotEmpty 
+        ? savedToken 
+        : (dotenv.env['AUTH_TOKEN']?.trim() ?? '');
+
     if (tenantId.isEmpty) {
       throw Exception('Tenant ID is missing. Please set it in Settings or configure DEV_TENANT_ID in .env.');
     }
@@ -30,7 +36,9 @@ class SyncService {
     );
 
     int syncedCount = 0;
+    int failedCount = 0;
     List<int> toDeleteIds = [];
+    List<String> syncErrors = [];
 
     for (var patient in pendingPatients) {
       if (patient['sync_status'] == 1) continue; // Already synced
@@ -74,7 +82,9 @@ class SyncService {
       // Guard: skip patient if DOB is missing — server requires it
       if (rawDob == null || rawDob.isEmpty) {
         print('Skipping patient $patientId: Date of Birth is missing.');
-        throw Exception('Patient $patientId is missing Date of Birth. Please edit the patient and add DOB before syncing.');
+        failedCount++;
+        syncErrors.add('Patient $patientId: Missing Date of Birth.');
+        continue;
       }
 
       try {
@@ -204,10 +214,9 @@ class SyncService {
           'x-user-permissions': 'sachi:patient:create',
         };
 
-        // If an explicit auth token is set (like for DEV environment bypassing gateway), append it
-        final token = dotenv.env['AUTH_TOKEN'];
-        if (token != null && token.isNotEmpty) {
-          headers['Authorization'] = 'Bearer $token';
+        // If an explicit auth token is set (from UI or .env), append it
+        if (authToken.isNotEmpty) {
+          headers['Authorization'] = 'Bearer $authToken';
         }
 
         final response = await http.post(
@@ -235,19 +244,26 @@ class SyncService {
           print('Server Response: ${response.body}');
           print('======================================');
 
-          // Throw immediately so the snackbar shows the real API error reason
+          // Record error and continue instead of throwing immediately
           String apiError = response.body;
           try {
             final decoded = jsonDecode(response.body);
             apiError = decoded['error']?['message'] ?? decoded['message'] ?? response.body;
           } catch (_) {}
-          throw Exception(
-            'Server rejected patient $patientId (HTTP ${response.statusCode}): $apiError',
-          );
+          
+          if (response.statusCode == 401 || response.statusCode == 403) {
+            // Token expired or invalid: ABORT ENTIRE SYNC so we don't waste battery looping 50 offline patients
+            throw Exception('Authentication Failed: Token is expired or revoked. Please update your Auth Token in Settings.');
+          }
+          
+          failedCount++;
+          syncErrors.add('Patient $patientId (HTTP ${response.statusCode}): $apiError');
         }
       } catch (e) {
         print('Error syncing patient $patientId: $e');
-        rethrow;
+        failedCount++;
+        syncErrors.add('Patient $patientId: $e');
+        continue; // Continue to the next patient instead of rethrowing
       }
     }
 
@@ -267,6 +283,10 @@ class SyncService {
 
     if (syncedCount == 0 && pendingPatients.where((p) => p['sync_status'] == 0).isEmpty) {
       throw Exception('No pending patients to sync.');
+    } else if (failedCount > 0) {
+      // If some failed, throw a combined error message at the end
+      final errorSummary = syncErrors.take(3).join('\n'); // Show first 3 errors
+      throw Exception('Synced $syncedCount patients, but $failedCount failed:\n$errorSummary${failedCount > 3 ? '\n...and more' : ''}');
     } else if (syncedCount == 0) {
       throw Exception('Failed to sync patients. Check network and tenant ID.');
     }
