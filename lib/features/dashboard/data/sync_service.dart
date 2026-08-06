@@ -8,7 +8,10 @@ class SyncService {
   static final SyncService instance = SyncService._init();
   SyncService._init();
 
-  Future<void> syncPatients({required bool deleteAfterSync}) async {
+  Future<void> syncPatients({
+    required bool deleteAfterSync,
+    void Function(int, int)? onProgress,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     // Read from SharedPreferences first; fall back to DEV_TENANT_ID from .env
     final savedTenantId = prefs.getString('tenant_id')?.trim() ?? '';
@@ -31,6 +34,7 @@ class SyncService {
 
     int syncedCount = 0;
     List<int> toDeleteIds = [];
+    int totalToSync = pendingPatients.where((p) => p['sync_status'] != 1).length;
 
     for (var patient in pendingPatients) {
       if (patient['sync_status'] == 1) continue; // Already synced
@@ -219,6 +223,7 @@ class SyncService {
         if (response.statusCode == 200 || response.statusCode == 201) {
           // Successfully synced
           syncedCount++;
+          onProgress?.call(syncedCount, totalToSync);
           if (deleteAfterSync) {
             toDeleteIds.add(patientId);
           } else {

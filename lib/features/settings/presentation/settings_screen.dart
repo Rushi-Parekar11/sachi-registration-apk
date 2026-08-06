@@ -231,21 +231,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'API Configuration',
-              style: TextStyle(
-                fontSize: 18.sp,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textDark,
-              ),
-            ),
-            SizedBox(height: 12.h),
-            _buildTextField(
-              controller: _tenantIdController,
-              label: 'Tenant ID',
-              icon: Icons.business,
-            ),
-            SizedBox(height: 24.h),
+
             Text(
               'Location Settings',
               style: TextStyle(

@@ -331,7 +331,6 @@ class _PatientsScreenState extends ConsumerState<PatientsScreen> {
                           // TODO: implement date filtering logic
                         },
                       ),
-                    ),
                   ],
                 ),
                 SizedBox(height: 24.h),
