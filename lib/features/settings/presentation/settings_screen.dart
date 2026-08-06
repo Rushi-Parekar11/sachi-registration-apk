@@ -14,7 +14,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final TextEditingController _tenantIdController = TextEditingController();
   final TextEditingController _tokenController = TextEditingController();
   final TextEditingController _countryController = TextEditingController();
   final TextEditingController _stateController = TextEditingController();
@@ -59,7 +58,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _tenantIdController.text = prefs.getString('tenant_id') ?? '';
       _tokenController.text = prefs.getString('auth_token') ?? '';
       _countryController.text = prefs.getString('country') ?? '';
       _stateController.text = prefs.getString('state') ?? '';
@@ -92,7 +90,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _saveSettings() async {
     setState(() => _isSaving = true);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('tenant_id', _tenantIdController.text.trim());
     await prefs.setString('auth_token', _tokenController.text.trim());
     await prefs.setString('country', _countryController.text.trim());
     await prefs.setString('state', _stateController.text.trim());
@@ -135,7 +132,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await prefs.clear(); // Clear all shared preferences
 
       setState(() {
-        _tenantIdController.clear();
         _tokenController.clear();
         _countryController.clear();
         _stateController.clear();
@@ -245,14 +241,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             SizedBox(height: 12.h),
             _buildTextField(
-              controller: _tenantIdController,
-              label: 'Tenant ID',
-              icon: Icons.business,
-            ),
-            SizedBox(height: 12.h),
-            _buildTextField(
               controller: _tokenController,
-              label: 'Auth Token (if token expired)',
+              label: 'Auth Token (paste here if token expired)',
               icon: Icons.key,
             ),
             SizedBox(height: 24.h),
