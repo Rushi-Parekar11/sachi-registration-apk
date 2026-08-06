@@ -87,12 +87,12 @@ class _PatientRegistrationScreenState
   String _firstIntimateAge = '';
 
   // Form Fields - Obstetric
-  String _totalPregnancies = '0';
-  String _normalDeliveries = '0';
-  String _pretermDeliveries = '0';
-  String _csectionDeliveries = '0';
-  String _abortions = '0';
-  String _liveChildren = '0';
+  String _totalPregnancies = '';
+  String _normalDeliveries = '';
+  String _pretermDeliveries = '';
+  String _csectionDeliveries = '';
+  String _abortions = '';
+  String _liveChildren = '';
 
   List<csc.Country> _countries = [];
   List<csc.State> _states = [];
@@ -213,13 +213,12 @@ class _PatientRegistrationScreenState
         } else {
           _ageUndisclosed = true;
         }
-        _totalPregnancies = (history['no_pregnancies'] ?? 0).toString();
-        _normalDeliveries = (history['no_normal_deliveries'] ?? 0).toString();
-        _pretermDeliveries = (history['no_preterm_deliveries'] ?? 0).toString();
-        _csectionDeliveries = (history['no_csection_deliveries'] ?? 0)
-            .toString();
-        _abortions = (history['no_miscarriages'] ?? 0).toString();
-        _liveChildren = (history['live_children'] ?? 0).toString();
+        _totalPregnancies = (history['no_pregnancies'] == null || history['no_pregnancies'] == 0) ? '' : history['no_pregnancies'].toString();
+        _normalDeliveries = (history['no_normal_deliveries'] == null || history['no_normal_deliveries'] == 0) ? '' : history['no_normal_deliveries'].toString();
+        _pretermDeliveries = (history['no_preterm_deliveries'] == null || history['no_preterm_deliveries'] == 0) ? '' : history['no_preterm_deliveries'].toString();
+        _csectionDeliveries = (history['no_csection_deliveries'] == null || history['no_csection_deliveries'] == 0) ? '' : history['no_csection_deliveries'].toString();
+        _abortions = (history['no_miscarriages'] == null || history['no_miscarriages'] == 0) ? '' : history['no_miscarriages'].toString();
+        _liveChildren = (history['live_children'] == null || history['live_children'] == 0) ? '' : history['live_children'].toString();
 
         try {
           if (history['symptoms_mapping'] != null) {
@@ -595,7 +594,7 @@ class _PatientRegistrationScreenState
                 context: context,
                 initialDate: initialDate,
                 firstDate: DateTime(1900),
-                lastDate: DateTime(2100),
+                lastDate: DateTime.now(),
                 builder: (context, child) {
                   return Theme(
                     data: Theme.of(context).copyWith(
@@ -780,8 +779,9 @@ class _PatientRegistrationScreenState
           ),
           SizedBox(height: 4.h),
           DropdownButtonFormField<String>(
+            isExpanded: true,
             value: value,
-            isDense: true, isExpanded: true,
+            isDense: true,
             decoration: InputDecoration(
               filled: true,
               fillColor: enabled ? AppTheme.white : AppTheme.backgroundLight,
@@ -987,6 +987,12 @@ class _PatientRegistrationScreenState
           _ageAtMarriage = '';
           _firstIntimateAge = '';
           _menopauseStatus = 'Select';
+          _totalPregnancies = '';
+          _normalDeliveries = '';
+          _csectionDeliveries = '';
+          _pretermDeliveries = '';
+          _abortions = '';
+          _liveChildren = '';
         });
         _scrollController.animateTo(
           0.0,
@@ -1085,7 +1091,7 @@ class _PatientRegistrationScreenState
                   _buildDropdown(
                     'Marital Status',
                     _maritalStatus,
-                    ['Select', 'Single', 'Married', 'Divorced', 'Widowed'],
+                    ['Select', 'Single', 'Married', 'Unknown', 'Widowed'],
                     isRequired: true,
                     onChanged: (v) => _maritalStatus = v!,
                   ),
@@ -1121,7 +1127,7 @@ class _PatientRegistrationScreenState
                     onChanged: (v) => _aadhaar = v,
                     validator: (val) {
                       if (val != null && val.trim().isNotEmpty) {
-                        if (!RegExp(r'^\d{12}$').hasMatch(val.trim())) return 'Aadhaar must be exactly 12 digits';
+                        if (!RegExp(r'^[2-9]\d{11}$').hasMatch(val.trim())) return 'Invalid Aadhaar (must be 12 digits, cannot start with 0 or 1)';
                       }
                       return null;
                     },
@@ -1457,8 +1463,9 @@ class _PatientRegistrationScreenState
                             SizedBox(width: 12.w),
                             Expanded(
                               child: DropdownButtonFormField<String>(
+                                isExpanded: true,
                                 value: _screeningTestResults[test],
-                                isDense: true, isExpanded: true,
+                                isDense: true,
                                 decoration: InputDecoration(
                                   filled: true,
                                   fillColor: AppTheme.white,
@@ -1519,8 +1526,9 @@ class _PatientRegistrationScreenState
                               SizedBox(width: 8.w),
                               Expanded(
                                 child: DropdownButtonFormField<String>(
+                                  isExpanded: true,
                                   value: _hpvRiskLevel,
-                                  isDense: true, isExpanded: true,
+                                  isDense: true,
                                   decoration: InputDecoration(
                                     contentPadding: EdgeInsets.symmetric(
                                       horizontal: 12.w,

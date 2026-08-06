@@ -26,6 +26,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   String _lastSyncTime = 'Never';
   bool _isSelectionMode = false;
   final Set<int> _selectedPatientIds = {};
+  String _searchQuery = '';
+  String _dateFilter = 'all'; 
+  DateTime? _selectedCustomDate;
 
   void _toggleSelection(int id) {
     setState(() {
@@ -43,7 +46,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Patients'),
-        content: Text('Are you sure you want to delete ${_selectedPatientIds.length} offline patient(s)?'),
+        content: Text(
+          'Are you sure you want to delete ${_selectedPatientIds.length} offline patient(s)?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -74,9 +79,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error deleting patients: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error deleting patients: $e')));
       }
     }
   }
@@ -101,9 +106,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Confirm Sync'),
-        content: Text(deleteAfter 
-          ? 'Are you sure you want to sync and delete successfully synced patients from this device?' 
-          : 'Are you sure you want to sync offline patients?'),
+        content: Text(
+          deleteAfter
+              ? 'Are you sure you want to sync and delete successfully synced patients from this device?'
+              : 'Are you sure you want to sync offline patients?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -144,9 +151,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       _loadLastSyncTime();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Sync failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Sync failed: $e')));
       }
     } finally {
       if (mounted) {
@@ -193,9 +200,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
           ],
         ),
-        actions: [
-          SizedBox(width: 16.w),
-        ],
+        actions: [SizedBox(width: 16.w)],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -233,13 +238,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           child: LinearProgressIndicator(
                             value: _syncProgress,
                             backgroundColor: AppTheme.white,
-                            valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryBlue),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              AppTheme.primaryBlue,
+                            ),
                           ),
                         ),
                         SizedBox(width: 8.w),
                         Text(
                           '${(_syncProgress * 100).toInt()}%',
-                          style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.bold, color: AppTheme.accentOrange),
+                          style: TextStyle(
+                            fontSize: 12.sp,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.accentOrange,
+                          ),
                         ),
                       ],
                     )
@@ -251,13 +262,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.primaryBlue,
                             foregroundColor: AppTheme.white,
-                            padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 12.w,
+                              vertical: 4.h,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16.r),
+                            ),
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
                           icon: Icon(Icons.cloud_upload, size: 12.sp),
-                          label: Text('Sync', style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.bold)),
+                          label: Text(
+                            'Sync',
+                            style: TextStyle(
+                              fontSize: 10.sp,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -304,7 +326,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                       ],
                     ),
-                    loading: () => const Center(child: CircularProgressIndicator()),
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
                     error: (_, __) => Row(
                       children: [
                         Expanded(
@@ -335,22 +358,48 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     children: [
                       Expanded(
                         child: TextField(
-                          style: TextStyle(fontSize: 12.sp, color: AppTheme.textDark),
+                          onChanged: (value) {
+                            setState(() {
+                              _searchQuery = value.toLowerCase();
+                            });
+                          },
+                          style: TextStyle(
+                            fontSize: 12.sp,
+                            color: AppTheme.textDark,
+                          ),
                           decoration: InputDecoration(
                             isDense: true,
                             hintText: 'Search patients...',
-                            hintStyle: TextStyle(fontSize: 12.sp, color: AppTheme.textLight),
-                            prefixIcon: Icon(Icons.search, size: 18.sp, color: AppTheme.textLight),
+                            hintStyle: TextStyle(
+                              fontSize: 12.sp,
+                              color: AppTheme.textLight,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.search,
+                              size: 18.sp,
+                              color: AppTheme.textLight,
+                            ),
                             filled: true,
                             fillColor: AppTheme.white,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12.w,
+                              vertical: 12.h,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12.r),
-                              borderSide: BorderSide(color: AppTheme.textLight.withValues(alpha: 0.2)),
+                              borderSide: BorderSide(
+                                color: AppTheme.textLight.withValues(
+                                  alpha: 0.2,
+                                ),
+                              ),
                             ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12.r),
-                              borderSide: BorderSide(color: AppTheme.textLight.withValues(alpha: 0.2)),
+                              borderSide: BorderSide(
+                                color: AppTheme.textLight.withValues(
+                                  alpha: 0.2,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -365,12 +414,38 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           ),
                         ),
                         child: PopupMenuButton<String>(
-                          icon: Icon(Icons.filter_list, color: AppTheme.primaryBlue, size: 20.sp),
+                          icon: Icon(
+                            Icons.filter_list,
+                            color: AppTheme.primaryBlue,
+                            size: 20.sp,
+                          ),
                           position: PopupMenuPosition.under,
-                          onSelected: (value) {
-                            // Filter logic here
+                          onSelected: (value) async {
+                            if (value == 'filter_on_date') {
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: _selectedCustomDate ?? DateTime.now(),
+                                firstDate: DateTime(2000),
+                                lastDate: DateTime.now(),
+                              );
+                              if (picked != null) {
+                                setState(() {
+                                  _dateFilter = 'filter_on_date';
+                                  _selectedCustomDate = picked;
+                                });
+                              }
+                            } else {
+                              setState(() {
+                                _dateFilter = value;
+                                _selectedCustomDate = null;
+                              });
+                            }
                           },
                           itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'all',
+                              child: Text('All time'),
+                            ),
                             const PopupMenuItem(
                               value: 'today',
                               child: Text('Today registered'),
@@ -379,13 +454,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               value: 'last_7_days',
                               child: Text('Last 7 days'),
                             ),
-                            const PopupMenuItem(
+                            PopupMenuItem(
                               value: 'filter_on_date',
-                              child: Text('Filter on date'),
-                            ),
-                            const PopupMenuItem(
-                              value: 'between_two_dates',
-                              child: Text('Between two dates'),
+                              child: Text(
+                                _dateFilter == 'filter_on_date' && _selectedCustomDate != null 
+                                    ? 'Date: ${_selectedCustomDate!.toIso8601String().split('T')[0]}' 
+                                    : 'Select date'
+                              ),
                             ),
                           ],
                         ),
@@ -426,9 +501,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       Row(
                         children: [
                           Text(
-                            'Offline Patients (${patientsAsync.value?.where((p) => p.status == 'Pending Sync').length ?? 0})',
+                            'Offline patients (${patientsAsync.value?.where((p) => p.status == 'Pending Sync').length ?? 0})',
                             style: TextStyle(
-                              fontSize: 18.sp,
+                              fontSize: 14.sp,
                               fontWeight: FontWeight.bold,
                               color: AppTheme.textDark,
                             ),
@@ -445,24 +520,48 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           children: [
                             TextButton.icon(
                               onPressed: () {
-                                final offlinePatients = patientsAsync.value?.where((p) => p.status == 'Pending Sync').toList() ?? [];
+                                final offlinePatients =
+                                    patientsAsync.value
+                                        ?.where(
+                                          (p) => p.status == 'Pending Sync',
+                                        )
+                                        .toList() ??
+                                    [];
                                 setState(() {
-                                  if (_selectedPatientIds.length == offlinePatients.length) {
+                                  if (_selectedPatientIds.length ==
+                                      offlinePatients.length) {
                                     _selectedPatientIds.clear();
                                   } else {
-                                    _selectedPatientIds.addAll(offlinePatients.map((p) => p.id));
+                                    _selectedPatientIds.addAll(
+                                      offlinePatients.map((p) => p.id),
+                                    );
                                   }
                                 });
                               },
-                              icon: Icon(Icons.done_all, size: 16.sp, color: AppTheme.primaryBlue),
+                              icon: Icon(
+                                Icons.done_all,
+                                size: 16.sp,
+                                color: AppTheme.primaryBlue,
+                              ),
                               label: Text(
                                 'Select All',
-                                style: TextStyle(color: AppTheme.primaryBlue, fontSize: 12.sp),
+                                style: TextStyle(
+                                  color: AppTheme.primaryBlue,
+                                  fontSize: 12.sp,
+                                ),
                               ),
                             ),
                             IconButton(
-                              onPressed: _selectedPatientIds.isEmpty ? null : _deleteSelectedPatients,
-                              icon: Icon(Icons.delete_outline, color: _selectedPatientIds.isEmpty ? Colors.grey : Colors.red, size: 20.sp),
+                              onPressed: _selectedPatientIds.isEmpty
+                                  ? null
+                                  : _deleteSelectedPatients,
+                              icon: Icon(
+                                Icons.delete_outline,
+                                color: _selectedPatientIds.isEmpty
+                                    ? Colors.grey
+                                    : Colors.red,
+                                size: 20.sp,
+                              ),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
                             ),
@@ -474,7 +573,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   _selectedPatientIds.clear();
                                 });
                               },
-                              icon: Icon(Icons.close, color: AppTheme.textDark, size: 20.sp),
+                              icon: Icon(
+                                Icons.close,
+                                color: AppTheme.textDark,
+                                size: 20.sp,
+                              ),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
                             ),
@@ -501,14 +604,58 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                     child: patientsAsync.when(
                       data: (patients) {
-                        final offlinePatients = patients.where((p) => p.status == 'Pending Sync').toList();
+                        var offlinePatients = patients
+                            .where((p) => p.status == 'Pending Sync')
+                            .toList();
+                            
+                        if (_searchQuery.isNotEmpty) {
+                          offlinePatients = offlinePatients.where((p) {
+                            return (p.patientName).toLowerCase().contains(_searchQuery);
+                          }).toList();
+                        }
+                        
+                        final now = DateTime.now();
+                        final today = DateTime(now.year, now.month, now.day);
+                        
+                        if (_dateFilter == 'today') {
+                          offlinePatients = offlinePatients.where((p) {
+                            if (p.lastVisitDate == null) return false;
+                            try {
+                              final d = DateTime.parse(p.lastVisitDate!);
+                              return d.year == today.year && d.month == today.month && d.day == today.day;
+                            } catch (_) { return false; }
+                          }).toList();
+                        } else if (_dateFilter == 'last_7_days') {
+                          final sevenDaysAgo = today.subtract(const Duration(days: 7));
+                          offlinePatients = offlinePatients.where((p) {
+                            if (p.lastVisitDate == null) return false;
+                            try {
+                              final d = DateTime.parse(p.lastVisitDate!);
+                              return d.isAfter(sevenDaysAgo) || d.isAtSameMomentAs(sevenDaysAgo);
+                            } catch (_) { return false; }
+                          }).toList();
+                        } else if (_dateFilter == 'filter_on_date' && _selectedCustomDate != null) {
+                          final target = _selectedCustomDate!;
+                          offlinePatients = offlinePatients.where((p) {
+                            if (p.lastVisitDate == null) return false;
+                            try {
+                              final d = DateTime.parse(p.lastVisitDate!);
+                              return d.year == target.year && d.month == target.month && d.day == target.day;
+                            } catch (_) { return false; }
+                          }).toList();
+                        }
+
                         if (offlinePatients.isEmpty) {
                           return Padding(
                             padding: EdgeInsets.symmetric(vertical: 48.h),
                             child: Center(
                               child: Column(
                                 children: [
-                                  Icon(Icons.insert_drive_file_outlined, size: 48.sp, color: AppTheme.textLight),
+                                  Icon(
+                                    Icons.insert_drive_file_outlined,
+                                    size: 48.sp,
+                                    color: AppTheme.textLight,
+                                  ),
                                   SizedBox(height: 8.h),
                                   Text(
                                     'No offline patient registered.',
@@ -522,7 +669,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ),
                           );
                         }
-                        
+
                         return ListView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
@@ -535,11 +682,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 if (_isSelectionMode) {
                                   _toggleSelection(patient.id);
                                 } else {
-                                  context.push('/patient-registration', extra: patient);
+                                  context.push(
+                                    '/patient-registration',
+                                    extra: patient,
+                                  );
                                 }
                               },
                               selectionMode: _isSelectionMode,
-                              isSelected: _selectedPatientIds.contains(patient.id),
+                              isSelected: _selectedPatientIds.contains(
+                                patient.id,
+                              ),
                               onLongPress: () {
                                 if (!_isSelectionMode) {
                                   setState(() {
@@ -552,8 +704,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           },
                         );
                       },
-                      loading: () => const Center(child: CircularProgressIndicator()),
-                      error: (_, __) => const Center(child: Text('No offline patient registered.')),
+                      loading: () =>
+                          const Center(child: CircularProgressIndicator()),
+                      error: (_, __) => const Center(
+                        child: Text('No offline patient registered.'),
+                      ),
                     ),
                   ),
                 ],
@@ -605,11 +760,7 @@ class _StatCard extends StatelessWidget {
               color: iconBgColor,
               borderRadius: BorderRadius.circular(8.r),
             ),
-            child: Icon(
-              icon,
-              color: iconColor,
-              size: 24.sp,
-            ),
+            child: Icon(icon, color: iconColor, size: 24.sp),
           ),
           SizedBox(width: 12.w),
           Expanded(
