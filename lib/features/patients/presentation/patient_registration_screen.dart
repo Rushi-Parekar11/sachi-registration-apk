@@ -533,7 +533,7 @@ class _PatientRegistrationScreenState
             readOnly: true,
             style: TextStyle(fontSize: 12.sp, color: AppTheme.textDark),
             decoration: InputDecoration(
-              isDense: true, isExpanded: true,
+              isDense: true,
               filled: true,
               fillColor: enabled ? AppTheme.white : AppTheme.backgroundLight,
               hintText: hint,
@@ -690,7 +690,7 @@ class _PatientRegistrationScreenState
             keyboardType: type,
             style: TextStyle(fontSize: 12.sp, color: AppTheme.textDark),
             decoration: InputDecoration(
-              isDense: true, isExpanded: true,
+              isDense: true,
               filled: true,
               fillColor: enabled ? AppTheme.white : AppTheme.backgroundLight,
               hintText: hint,
