@@ -30,7 +30,6 @@ class _SplashScreenState extends State<SplashScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Dummy logo, replace with actual SVG or image asset later
-            Icon(Icons.health_and_safety, size: 100.w, color: AppTheme.white),
             SizedBox(height: 24.h),
             Text(
               'SACHI',
@@ -40,6 +39,12 @@ class _SplashScreenState extends State<SplashScreen> {
                 fontWeight: FontWeight.bold,
                 letterSpacing: 2.0,
               ),
+            ),
+            SizedBox(height: 16.h),
+            Image.asset(
+              'assets/images/mediastra_logo.png',
+              width: 200.w,
+              errorBuilder: (context, error, stackTrace) => const SizedBox(), // Fallback if image not found yet
             ),
           ],
         ),
