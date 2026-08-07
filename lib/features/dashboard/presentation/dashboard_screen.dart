@@ -102,6 +102,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _performSync(bool deleteAfter) async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedToken = prefs.getString('auth_token')?.trim() ?? '';
+    if (savedToken.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please set the token from setting page.')),
+        );
+      }
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -151,9 +162,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       _loadLastSyncTime();
     } catch (e) {
       if (mounted) {
+        String errorMsg = e.toString();
+        if (errorMsg.contains('Token is expired or revoked') || errorMsg.toLowerCase().contains('unauthorized')) {
+          errorMsg = 'Please update token from settings page.';
+        } else {
+          errorMsg = 'Sync failed: $e';
+        }
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Sync failed: $e')));
+        ).showSnackBar(SnackBar(content: Text(errorMsg)));
       }
     } finally {
       if (mounted) {
@@ -208,7 +225,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           children: [
             // Offline sync banner
             Container(
-              color: AppTheme.statusInProgressYellow,
+              color: isOnline ? Colors.lightGreen.withOpacity(0.2) : AppTheme.statusInProgressYellow,
               padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -216,15 +233,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   Row(
                     children: [
                       Icon(
-                        Icons.sync_disabled,
-                        color: AppTheme.accentOrange,
+                        isOnline ? Icons.sync : Icons.sync_disabled,
+                        color: isOnline ? Colors.green : AppTheme.accentOrange,
                         size: 20.sp,
                       ),
                       SizedBox(width: 8.w),
                       Text(
-                        'Offline Mode',
+                        isOnline ? 'Online Mode' : 'Offline Mode',
                         style: TextStyle(
-                          color: AppTheme.accentOrange,
+                          color: isOnline ? Colors.green : AppTheme.accentOrange,
                           fontWeight: FontWeight.w600,
                         ),
                       ),

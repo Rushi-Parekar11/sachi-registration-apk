@@ -1021,6 +1021,13 @@ class _PatientRegistrationScreenState
       } else {
         if (mounted) context.go('/dashboard');
       }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill all the mandatory fields correctly.'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -1158,15 +1165,16 @@ class _PatientRegistrationScreenState
                   _buildTextField(
                     'Phone Number',
                     'Phone',
-                    isRequired: true,
+                    isRequired: false,
                     type: TextInputType.phone,
                     initialValue: _phone,
                     maxLength: 10,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     onChanged: (v) => _phone = v,
                     validator: (val) {
-                      if (val == null || val.trim().isEmpty) return 'This field is required';
-                      if (!RegExp(r'^\d{10}$').hasMatch(val.trim())) return 'Phone must be exactly 10 digits';
+                      if (val != null && val.trim().isNotEmpty) {
+                        if (!RegExp(r'^\d{10}$').hasMatch(val.trim())) return 'Phone must be exactly 10 digits';
+                      }
                       return null;
                     },
                   ),
