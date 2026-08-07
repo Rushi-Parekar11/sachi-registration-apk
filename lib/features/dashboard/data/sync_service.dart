@@ -66,13 +66,39 @@ class SyncService {
         }
         if (cleanHistory.containsKey('screening_history_mapping')) {
           try {
-            screeningHistory = jsonDecode(cleanHistory['screening_history_mapping'] as String);
+            final List rawList = jsonDecode(cleanHistory['screening_history_mapping'] as String);
+            screeningHistory = rawList.map((item) {
+              final cv = item['customValue'];
+              if (cv is String) {
+                try {
+                  final parsed = jsonDecode(cv);
+                  if (parsed is Map && parsed.containsKey('test')) {
+                    // Lowercase the test name and replace spaces with underscores to match webapp expectations (e.g., "pap_smear")
+                    parsed['test'] = (parsed['test'] as String)
+                        .toLowerCase()
+                        .replaceAll(RegExp(r'\s+'), '_');
+                    return {'customValue': jsonEncode(parsed)};
+                  }
+                } catch (_) {}
+              }
+              return item;
+            }).toList();
           } catch (_) {}
           cleanHistory.remove('screening_history_mapping');
         }
         if (cleanHistory.containsKey('substance_usage')) {
           try {
-            substances = jsonDecode(cleanHistory['substance_usage'] as String);
+            final List rawSubs = jsonDecode(cleanHistory['substance_usage'] as String);
+            substances = rawSubs.map((item) {
+              if (item is Map && item['customValue'] is String) {
+                // The web app expects lowercase with underscores (e.g., 'betel_leaf')
+                final val = (item['customValue'] as String)
+                    .toLowerCase()
+                    .replaceAll(RegExp(r'\s+'), '_');
+                return {'customValue': val};
+              }
+              return item;
+            }).toList();
           } catch (_) {}
           cleanHistory.remove('substance_usage');
         }
@@ -169,7 +195,7 @@ class SyncService {
         // Remove fields not expected by the server (web app doesn't send these)
         cleanHistory.remove('lmp_date');
         cleanHistory.remove('first_intimate_age');
-        cleanHistory.remove('live_children');
+        // NOTE: live_children IS sent to the server (do NOT remove it)
       }
 
       // Construct payload matching the web app's working API format

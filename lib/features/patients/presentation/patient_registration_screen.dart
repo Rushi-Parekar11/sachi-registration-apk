@@ -60,6 +60,7 @@ class _PatientRegistrationScreenState
   String _guardianName = '';
   String _maritalStatus = 'Select';
   String _dob = '';
+  String _age = '';
   String _phone = '';
   String _aadhaar = '';
   String _abha = '';
@@ -179,6 +180,8 @@ class _PatientRegistrationScreenState
       _guardianName = data['gaurdian_name'] ?? '';
       _maritalStatus = data['maratial_status'] ?? 'Select';
       _dob = data['date_of_birth'] ?? '';
+      _age = (data['age'] ?? '').toString();
+      if (_age == '0') _age = '';
       _phone = (data['mobile_number'] ?? '').toString();
       if (_phone == '0') _phone = '';
       _aadhaar = data['aadhaar_number'] ?? '';
@@ -239,20 +242,34 @@ class _PatientRegistrationScreenState
             final List screen = jsonDecode(
               history['screening_history_mapping'],
             );
-            _screeningHistory.clear();
-            _screeningTestResults.clear();
+            final List<String> restoredHistory = [];
+            final Map<String, String> restoredResults = {};
             for (var item in screen) {
-              final val = jsonDecode(item['customValue']);
-              _screeningHistory.add(val['test']);
-              if (val['result'] != null) {
-                _screeningTestResults[val['test']] = val['result'];
+              // customValue may be a JSON string (double-encoded) or already a Map
+              dynamic val;
+              if (item['customValue'] is String) {
+                val = jsonDecode(item['customValue']);
+              } else {
+                val = item['customValue'];
+              }
+              if (val == null || val['test'] == null) continue;
+              final String testName = val['test'] as String;
+              restoredHistory.add(testName);
+              if (val['result'] != null && (val['result'] as String).isNotEmpty) {
+                restoredResults[testName] = val['result'] as String;
               }
               if (val['riskLevel'] != null) {
-                _hpvRiskLevel = val['riskLevel'];
+                _hpvRiskLevel = val['riskLevel'] as String;
               }
             }
+            _screeningHistory = restoredHistory;
+            _screeningTestResults
+              ..clear()
+              ..addAll(restoredResults);
           }
-        } catch (_) {}
+        } catch (e) {
+          print('Error restoring screening history: $e');
+        }
       }
     });
     if (mounted) setState(() => _isLoadingData = false);
@@ -649,6 +666,7 @@ class _PatientRegistrationScreenState
   Widget _buildTextField(
     String label,
     String hint, {
+    Key? fieldKey,
     bool isRequired = false,
     bool enabled = true,
     TextInputType type = TextInputType.text,
@@ -684,6 +702,7 @@ class _PatientRegistrationScreenState
             SizedBox(height: 4.h),
           ],
           TextFormField(
+            key: fieldKey,
             initialValue: initialValue,
             enabled: enabled,
             keyboardType: type,
@@ -1101,7 +1120,40 @@ class _PatientRegistrationScreenState
                     'dd-mm-yyyy',
                     isRequired: true,
                     value: _dob,
-                    onChanged: (v) => setState(() => _dob = v),
+                    onChanged: (v) => setState(() {
+                      _dob = v;
+                      if (_dob.isNotEmpty) {
+                        try {
+                          final parts = _dob.split('-');
+                          if (parts.length == 3) {
+                            final year = int.parse(parts[0].length == 4 ? parts[0] : parts[2]);
+                            final month = int.parse(parts[0].length == 4 ? parts[1] : parts[1]);
+                            final day = int.parse(parts[0].length == 4 ? parts[2] : parts[0]);
+                            final dobDate = DateTime(year, month, day);
+                            final today = DateTime.now();
+                            int age = today.year - dobDate.year;
+                            if (today.month < dobDate.month || (today.month == dobDate.month && today.day < dobDate.day)) {
+                              age--;
+                            }
+                            _age = age.toString();
+                          }
+                        } catch (e) {
+                          _age = '';
+                        }
+                      } else {
+                        _age = '';
+                      }
+                    }),
+                  ),
+                  _buildTextField(
+                    'Age',
+                    'Age',
+                    fieldKey: ValueKey(_age),
+                    initialValue: _age,
+                    enabled: false,
+                    type: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onChanged: (v) => _age = v,
                   ),
                   _buildTextField(
                     'Phone Number',
@@ -1132,11 +1184,6 @@ class _PatientRegistrationScreenState
                       return null;
                     },
                   ),
-                ],
-              ),
-              _buildSectionHeader('Address & Identification'),
-              ResponsiveGridRow(
-                children: [
                   _buildTextField(
                     'ABHA No.',
                     'ABHA',
@@ -1238,10 +1285,6 @@ class _PatientRegistrationScreenState
                       return null;
                     },
                   ),
-                ],
-              ),
-              ResponsiveGridRow(
-                children: [
                   _buildSearchableDropdown(
                     'City',
                     _city,
@@ -1284,7 +1327,6 @@ class _PatientRegistrationScreenState
                       return null;
                     },
                   ),
-
                 ],
               ),
               SizedBox(height: 12.h),
@@ -1380,59 +1422,59 @@ class _PatientRegistrationScreenState
 
               // Reproductive History
               _buildSectionHeader('Reproductive & Lifestyle History'),
-              Text(
-                'Have you had Screening Test before?',
+              ResponsiveGridRow(
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Have you had Screening Test before?',
                 style: TextStyle(
                   fontSize: 10.sp,
                   color: AppTheme.textDark,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.start,
+              Wrap(
+                spacing: 8.w,
+                runSpacing: 4.h,
                 children: ['Pap smear', 'HPV', 'VIA', 'Colposcopy', 'No']
                     .map(
-                      (e) => Expanded(
-                        flex: e.length > 5 ? 2 : 1,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Checkbox(
-                              value: _screeningHistory.contains(e),
-                              onChanged: (v) {
-                                setState(() {
-                                  if (v == true) {
-                                    if (e == 'No') {
-                                      _screeningHistory.clear();
-                                      _screeningTestResults.clear();
-                                    } else {
-                                      _screeningHistory.remove('No');
-                                    }
-                                    _screeningHistory.add(e);
+                      (e) => Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Checkbox(
+                            value: _screeningHistory.contains(e),
+                            onChanged: (v) {
+                              setState(() {
+                                if (v == true) {
+                                  if (e == 'No') {
+                                    _screeningHistory.clear();
+                                    _screeningTestResults.clear();
                                   } else {
-                                    _screeningHistory.remove(e);
-                                    _screeningTestResults.remove(e);
+                                    _screeningHistory.remove('No');
                                   }
-                                });
-                              },
-                              activeColor: AppTheme.primaryBlue,
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: const VisualDensity(
-                                horizontal: -4,
-                                vertical: -4,
-                              ),
+                                  _screeningHistory.add(e);
+                                } else {
+                                  _screeningHistory.remove(e);
+                                  _screeningTestResults.remove(e);
+                                }
+                              });
+                            },
+                            activeColor: AppTheme.primaryBlue,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: const VisualDensity(
+                              horizontal: -4,
+                              vertical: -4,
                             ),
-                            SizedBox(width: 2.w),
-                            Flexible(
-                              child: Text(
-                                e,
-                                style: TextStyle(fontSize: 9.sp),
-                                overflow: TextOverflow.visible,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                          SizedBox(width: 2.w),
+                          Text(
+                            e,
+                            style: TextStyle(fontSize: 10.sp),
+                          ),
+                        ],
                       ),
                     )
                     .toList(),
@@ -1586,9 +1628,14 @@ class _PatientRegistrationScreenState
                     }).toList(),
                   ),
                 ),
-              SizedBox(height: 8.h),
-              Text(
-                'HPV Vaccinated?',
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(height: 8.h),
+                      Text(
+                        'HPV Vaccinated?',
                 style: TextStyle(
                   fontSize: 10.sp,
                   color: AppTheme.textDark,
@@ -1635,18 +1682,26 @@ class _PatientRegistrationScreenState
                   Text('No', style: TextStyle(fontSize: 10.sp)),
                 ],
               ),
-              SizedBox(height: 8.h),
-              _buildTextField(
-                'Any other medical condition?',
-                'Describe condition (if any)',
-                initialValue: _otherMedCondition,
-                onChanged: (v) => _otherMedCondition = v,
+                    ],
+                  ),
+                ],
               ),
-              _buildTextField(
-                'Family history of cancer? (if yes)',
-                'Relation and Type of Cancer',
-                initialValue: _familyCancer,
-                onChanged: (v) => _familyCancer = v,
+              SizedBox(height: 8.h),
+              ResponsiveGridRow(
+                children: [
+                  _buildTextField(
+                    'Any other medical condition?',
+                    'Describe condition (if any)',
+                    initialValue: _otherMedCondition,
+                    onChanged: (v) => _otherMedCondition = v,
+                  ),
+                  _buildTextField(
+                    'Family history of cancer? (if yes)',
+                    'Relation and Type of Cancer',
+                    initialValue: _familyCancer,
+                    onChanged: (v) => _familyCancer = v,
+                  ),
+                ],
               ),
               Text(
                 'Symptoms',
@@ -1678,6 +1733,22 @@ class _PatientRegistrationScreenState
                     children: [
                       Expanded(
                         child: _buildCheckbox(
+                          'Ulcers in external anogenital region',
+                          _symptoms,
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildCheckbox(
+                          'Lower abdominal pain',
+                          _symptoms,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildCheckbox(
                           'Pain during sexual intercourse',
                           _symptoms,
                         ),
@@ -1685,6 +1756,22 @@ class _PatientRegistrationScreenState
                       Expanded(
                         child: _buildCheckbox(
                           'Bleeding after intercourse',
+                          _symptoms,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildCheckbox(
+                          'Intermenstrual bleeding',
+                          _symptoms,
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildCheckbox(
+                          'Low back ache',
                           _symptoms,
                         ),
                       ),
@@ -1764,8 +1851,13 @@ class _PatientRegistrationScreenState
                   ),
                 ],
               ),
-              Text(
-                'Sexually active?',
+              ResponsiveGridRow(
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Sexually active?',
                 style: TextStyle(
                   fontSize: 10.sp,
                   color: AppTheme.textDark,
@@ -1793,9 +1885,14 @@ class _PatientRegistrationScreenState
                     )
                     .toList(),
               ),
-              SizedBox(height: 8.h),
-              Text(
-                'Multiple sexual partners?',
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(height: 8.h),
+                      Text(
+                        'Multiple sexual partners?',
                 style: TextStyle(
                   fontSize: 10.sp,
                   color: AppTheme.textDark,
@@ -1823,9 +1920,14 @@ class _PatientRegistrationScreenState
                     )
                     .toList(),
               ),
-              SizedBox(height: 12.h),
-              Text(
-                'Age at Marriage or first sexual intercourse (In years)',
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(height: 12.h),
+                      Text(
+                        'Age at Marriage or first sexual intercourse (In years)',
                 style: TextStyle(
                   fontSize: 10.sp,
                   color: AppTheme.textDark,
@@ -1870,6 +1972,10 @@ class _PatientRegistrationScreenState
                         return null;
                       },
                     ),
+                  ),
+                ],
+              ),
+                    ],
                   ),
                 ],
               ),
