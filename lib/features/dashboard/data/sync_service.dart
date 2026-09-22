@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,32 +9,144 @@ class SyncService {
   static final SyncService instance = SyncService._init();
   SyncService._init();
 
+  /// Performs dynamic login using hardcoded credentials (sverma / Test@123456)
+  /// and returns an auth token and tenantId.
+  Future<({String token, String tenantId})> _loginAndGetToken() async {
+    const String username = 'sverma';
+    const String password = 'Test@123456';
+
+    String apiBase;
+    if (kIsWeb) {
+      final webUrl = dotenv.env['WEB_BASE_URL']?.trim();
+      if (webUrl != null && webUrl.isNotEmpty) {
+        apiBase = webUrl;
+      } else {
+        apiBase = 'http://localhost:3110/api/v1/sachi';
+      }
+    } else {
+      apiBase = dotenv.env['API_BASE_URL'] ?? 'https://anwaya.mediastra.ai/api/v1/sachi';
+    }
+    
+    String authUrl;
+    if (apiBase.endsWith('/sachi')) {
+      authUrl = '${apiBase.substring(0, apiBase.length - 6)}/auth/login';
+    } else if (apiBase.endsWith('/sachi/')) {
+      authUrl = '${apiBase.substring(0, apiBase.length - 7)}/auth/login';
+    } else {
+      authUrl = '$apiBase/auth/login';
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse(authUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'username': username,
+          'password': password,
+        }),
+      );
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        String serverErr = response.body;
+        try {
+          final decoded = jsonDecode(response.body);
+          serverErr = decoded['error']?['message'] ?? decoded['message'] ?? response.body;
+        } catch (_) {}
+        throw Exception('Login Failed ($username): $serverErr');
+      }
+
+      final decoded = jsonDecode(response.body);
+      final data = decoded['data'];
+
+      String? token;
+      String? tenantId;
+
+      if (data is Map<String, dynamic>) {
+        token = (data['accessToken'] ?? data['access_token'] ?? data['token'] ?? data['jwt'])?.toString();
+        final user = data['user'];
+        if (user is Map<String, dynamic>) {
+          tenantId = (user['tenantId'] ?? user['tenant_id'])?.toString();
+        }
+      }
+      token ??= (decoded['accessToken'] ?? decoded['access_token'] ?? decoded['token'])?.toString();
+
+      if (token == null || token.isEmpty) {
+        throw Exception('Login succeeded but no auth token was returned by server.');
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final savedTenantId = prefs.getString('tenant_id')?.trim() ?? '';
+      final fallbackTenantId = savedTenantId.isNotEmpty
+          ? savedTenantId
+          : (dotenv.env['DEV_TENANT_ID']?.trim() ?? '5a69a97c-6a76-4251-ac90-8e575add8cc6');
+
+      tenantId ??= fallbackTenantId;
+      if (tenantId.isEmpty) {
+        tenantId = fallbackTenantId;
+      }
+
+      await prefs.setString('auth_token', token);
+      await prefs.setString('tenant_id', tenantId);
+
+      return (token: token, tenantId: tenantId);
+    } catch (e) {
+      print('Direct login attempt encountered error: $e');
+      final prefs = await SharedPreferences.getInstance();
+      final envToken = dotenv.env['AUTH_TOKEN']?.trim() ?? '';
+      final savedToken = prefs.getString('auth_token')?.trim() ?? '';
+      final fallbackToken = envToken.isNotEmpty ? envToken : savedToken;
+
+      final savedTenantId = prefs.getString('tenant_id')?.trim() ?? '';
+      final envTenantId = dotenv.env['DEV_TENANT_ID']?.trim() ?? '';
+      final fallbackTenantId = savedTenantId.isNotEmpty
+          ? savedTenantId
+          : (envTenantId.isNotEmpty ? envTenantId : 'c67824c6-8083-4c9a-b9ce-3968aa99315c');
+
+      if (fallbackToken.isNotEmpty) {
+        print('Falling back to pre-configured AUTH_TOKEN & DEV_TENANT_ID.');
+        await prefs.setString('auth_token', fallbackToken);
+        await prefs.setString('tenant_id', fallbackTenantId);
+        return (token: fallbackToken, tenantId: fallbackTenantId);
+      }
+
+      if (e is Exception) rethrow;
+      throw Exception('Login Error: $e');
+    }
+  }
+
   Future<void> syncPatients({
     required bool deleteAfterSync,
     void Function(int, int)? onProgress,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    // Read from SharedPreferences first; fall back to DEV_TENANT_ID from .env
-    final savedTenantId = prefs.getString('tenant_id')?.trim() ?? '';
-    final tenantId = savedTenantId.isNotEmpty
-        ? savedTenantId
-        : (dotenv.env['DEV_TENANT_ID']?.trim() ?? '');
+    // Dynamically authenticate before syncing
+    final auth = await _loginAndGetToken();
+    final authToken = auth.token;
+    final tenantId = auth.tenantId;
 
-    // Read Auth Token from SharedPreferences first; fall back to AUTH_TOKEN from .env
-    final savedToken = prefs.getString('auth_token')?.trim() ?? '';
-    final authToken = savedToken.isNotEmpty 
-        ? savedToken 
-        : (dotenv.env['AUTH_TOKEN']?.trim() ?? '');
+    final prefs = await SharedPreferences.getInstance();
 
     if (tenantId.isEmpty) {
-      throw Exception('Tenant ID is missing. Please set it in Settings or configure DEV_TENANT_ID in .env.');
+      throw Exception('Tenant ID is missing.');
     }
 
     final db = LocalDbHelper.instance;
-    final pendingPatients = await db.getPatients(); // gets all patients, but we should only sync those pending
+    final pendingPatients = await db.getPatients();
 
-    final String baseUrl = dotenv.env['API_BASE_URL'] ?? 'http://localhost:3109/api/v1/sachi';
-    // tenantId goes in the URL query param — matching how the web app hits the API
+    String baseUrl;
+    if (kIsWeb) {
+      final webUrl = dotenv.env['WEB_BASE_URL']?.trim();
+      if (webUrl != null && webUrl.isNotEmpty) {
+        baseUrl = webUrl;
+      } else {
+        baseUrl = 'http://localhost:3110/api/v1/sachi';
+      }
+    } else {
+      baseUrl = dotenv.env['API_BASE_URL'] ?? 'https://anwaya.mediastra.ai/api/v1/sachi';
+    }
+
     final url = Uri.parse('$baseUrl/transition/patients').replace(
       queryParameters: {'tenantId': tenantId},
     );
@@ -129,11 +242,15 @@ class SyncService {
                 ((today.month < dob.month || (today.month == dob.month && today.day < dob.day)) ? 1 : 0);
           }
         } else if (rawDob.contains('-')) {
-          // Already in YYYY-MM-DD format (from date picker)
-          isoDob = rawDob;
+          // Handle both YYYY-MM-DD and DD-MM-YYYY formats
           final parts = rawDob.split('-');
           if (parts.length == 3) {
-            final dob = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+            final isYearFirst = parts[0].length == 4;
+            final year = int.parse(isYearFirst ? parts[0] : parts[2]);
+            final month = int.parse(parts[1]);
+            final day = int.parse(isYearFirst ? parts[2] : parts[0]);
+            isoDob = '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+            final dob = DateTime(year, month, day);
             final today = DateTime.now();
             calculatedAge = today.year - dob.year -
                 ((today.month < dob.month || (today.month == dob.month && today.day < dob.day)) ? 1 : 0);
@@ -284,7 +401,7 @@ class SyncService {
           
           if (response.statusCode == 401 || response.statusCode == 403) {
             // Token expired or invalid: ABORT ENTIRE SYNC so we don't waste battery looping 50 offline patients
-            throw Exception('Authentication Failed: Token is expired or revoked. Please update your Auth Token in Settings.');
+            throw Exception('Authentication Failed: Token is expired or revoked. Please try syncing again.');
           }
           
           failedCount++;

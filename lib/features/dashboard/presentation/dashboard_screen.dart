@@ -102,33 +102,43 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _performSync(bool deleteAfter) async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedToken = prefs.getString('auth_token')?.trim() ?? '';
-    if (savedToken.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please set the token from setting page.')),
-        );
-      }
-      return;
-    }
-
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Confirm Sync'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.r),
+        ),
+        title: Text(
+          'Confirm Sync',
+          style: TextStyle(
+            fontSize: 14.sp,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textDark,
+          ),
+        ),
         content: Text(
           deleteAfter
               ? 'Are you sure you want to sync and delete successfully synced patients from this device?'
-              : 'Are you sure you want to sync offline patients?',
+              : 'Are you sure you want to sync offline patients to the server?',
+          style: TextStyle(fontSize: 12.sp, color: AppTheme.textDark),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
+            style: TextButton.styleFrom(
+              foregroundColor: AppTheme.textLight,
+            ),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryBlue,
+              foregroundColor: AppTheme.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8.r),
+              ),
+            ),
             child: const Text('Proceed'),
           ),
         ],
@@ -162,15 +172,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       _loadLastSyncTime();
     } catch (e) {
       if (mounted) {
-        String errorMsg = e.toString();
-        if (errorMsg.contains('Token is expired or revoked') || errorMsg.toLowerCase().contains('unauthorized')) {
-          errorMsg = 'Please update token from settings page.';
-        } else {
-          errorMsg = 'Sync failed: $e';
-        }
+        final errorMsg = e.toString().replaceFirst('Exception: ', '');
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(errorMsg)));
+        ).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
       }
     } finally {
       if (mounted) {

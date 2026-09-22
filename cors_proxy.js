@@ -1,51 +1,93 @@
+/**
+ * Local CORS proxy for Flutter Web → platform API.
+ *
+ * Usage:
+ *   node cors_proxy.js
+ *
+ * Then in .env set:
+ *   WEB_BASE_URL=http://localhost:3110/api/v1/sachi
+ */
 const http = require('http');
+const https = require('https');
+const { URL } = require('url');
+
+const LISTEN_PORT = Number(process.env.CORS_PROXY_PORT || 3110);
+const TARGET_ORIGIN =
+  process.env.PLATFORM_API_ORIGIN || 'https://anwaya.mediastra.ai';
+const target = new URL(TARGET_ORIGIN);
+const transport = target.protocol === 'https:' ? https : http;
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers':
+    'Content-Type, Authorization, Accept, x-tenant-id, x-user-id, x-gateway-authenticated, x-permissions, x-user-permissions, x-service-code, x-client-id',
+  'Access-Control-Max-Age': '86400',
+};
 
 const server = http.createServer((req, res) => {
-  // Set CORS headers for Flutter Web
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-tenant-id');
+  Object.entries(CORS_HEADERS).forEach(([key, value]) => {
+    res.setHeader(key, value);
+  });
 
-  // Handle preflight requests
   if (req.method === 'OPTIONS') {
-    res.writeHead(200);
+    res.writeHead(204);
     res.end();
     return;
   }
 
-  // Forward the request to the SACHI backend
-  // We MUST delete the 'origin' header so the backend doesn't trigger its strict CORS checks
-  const forwardedHeaders = { ...req.headers, host: 'localhost:3109' };
-  delete forwardedHeaders['origin'];
+  const forwardedHeaders = { ...req.headers };
+  forwardedHeaders.host = target.host;
+  delete forwardedHeaders.origin;
+  delete forwardedHeaders.referer;
+  delete forwardedHeaders['content-length'];
 
   const options = {
-    hostname: 'localhost',
-    port: 3109,
+    protocol: target.protocol,
+    hostname: target.hostname,
+    port: target.port || (target.protocol === 'https:' ? 443 : 80),
     path: req.url,
     method: req.method,
-    headers: forwardedHeaders
+    headers: forwardedHeaders,
   };
 
-  const proxyReq = http.request(options, (proxyRes) => {
-    // We don't want the backend's strict CORS headers to override ours
-    const headers = proxyRes.headers;
+  const proxyReq = transport.request(options, (proxyRes) => {
+    const headers = { ...proxyRes.headers };
     delete headers['access-control-allow-origin'];
     delete headers['access-control-allow-credentials'];
+    delete headers['access-control-allow-headers'];
+    delete headers['access-control-allow-methods'];
+    delete headers['cross-origin-resource-policy'];
+    delete headers['cross-origin-opener-policy'];
 
-    res.writeHead(proxyRes.statusCode, headers);
+    Object.entries(CORS_HEADERS).forEach(([key, value]) => {
+      headers[key.toLowerCase()] = value;
+    });
+
+    res.writeHead(proxyRes.statusCode || 502, headers);
     proxyRes.pipe(res, { end: true });
   });
 
-  req.pipe(proxyReq, { end: true });
-  
-  proxyReq.on('error', (e) => {
-    console.error('Proxy Error:', e.message);
-    res.writeHead(500);
-    res.end();
+  proxyReq.on('error', (error) => {
+    console.error('Proxy Error:', error.message);
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+    }
+    res.end(
+      JSON.stringify({
+        success: false,
+        error: {
+          code: 'PROXY_ERROR',
+          message: error.message,
+        },
+      }),
+    );
   });
+
+  req.pipe(proxyReq, { end: true });
 });
 
-server.listen(3110, () => {
-  console.log('✅ Local CORS Proxy running on http://localhost:3110');
-  console.log('Forwarding requests to http://localhost:3109');
+server.listen(LISTEN_PORT, () => {
+  console.log(`CORS proxy listening on http://localhost:${LISTEN_PORT}`);
+  console.log(`Forwarding to ${TARGET_ORIGIN}`);
 });

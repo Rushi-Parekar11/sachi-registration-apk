@@ -14,7 +14,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final TextEditingController _tokenController = TextEditingController();
   final TextEditingController _countryController = TextEditingController();
   final TextEditingController _stateController = TextEditingController();
   final TextEditingController _cityController = TextEditingController();
@@ -58,7 +57,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _tokenController.text = prefs.getString('auth_token') ?? '';
       _countryController.text = prefs.getString('country') ?? '';
       _stateController.text = prefs.getString('state') ?? '';
       _cityController.text = prefs.getString('city') ?? '';
@@ -90,7 +88,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _saveSettings() async {
     setState(() => _isSaving = true);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('auth_token', _tokenController.text.trim());
     await prefs.setString('country', _countryController.text.trim());
     await prefs.setString('state', _stateController.text.trim());
     await prefs.setString('city', _cityController.text.trim());
@@ -132,7 +129,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await prefs.clear(); // Clear all shared preferences
 
       setState(() {
-        _tokenController.clear();
         _countryController.clear();
         _stateController.clear();
         _cityController.clear();
@@ -231,22 +227,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'API Configuration',
-              style: TextStyle(
-                fontSize: 18.sp,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textDark,
-              ),
-            ),
-            SizedBox(height: 12.h),
-            _buildTextField(
-              controller: _tokenController,
-              label: 'Auth Token (paste here if token expired)',
-              icon: Icons.key,
-            ),
-            SizedBox(height: 24.h),
-
             Text(
               'Location Settings',
               style: TextStyle(

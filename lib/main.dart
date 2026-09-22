@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'core/config/app_router.dart';
 import 'core/theme/app_theme.dart';
-
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 Future<void> main() async {
-  await dotenv.load(fileName: ".env");
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (_) {}
+  if (kIsWeb) {
+    databaseFactory = databaseFactoryFfiWeb;
+  }
   runApp(const ProviderScope(child: SachiApp()));
 }
 

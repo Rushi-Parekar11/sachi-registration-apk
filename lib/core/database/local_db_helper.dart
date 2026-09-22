@@ -92,6 +92,19 @@ CREATE TABLE local_patient_history (
 ''');
   }
 
+  Future<int> insertPatientWithHistory(
+    Map<String, dynamic> patient,
+    Map<String, dynamic> history,
+  ) async {
+    final db = await instance.database;
+    return db.transaction((txn) async {
+      final patientId = await txn.insert('local_patients', patient);
+      history['patient_id'] = patientId;
+      await txn.insert('local_patient_history', history);
+      return patientId;
+    });
+  }
+
   Future<int> insertPatient(Map<String, dynamic> patient) async {
     final db = await instance.database;
     return await db.insert('local_patients', patient);
